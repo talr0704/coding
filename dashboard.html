@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Projects — CodeKids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="dashboard-page">
+
+  <header class="topbar">
+    <a href="index.html" class="topbar-logo">
+      <span class="logo-icon-sm">🚀</span>
+      <span class="logo-text-sm">CodeKids</span>
+    </a>
+    <div class="topbar-user">
+      <img id="user-avatar" src="" alt="" class="topbar-avatar" />
+      <span id="user-name">...</span>
+      <button class="btn-signout-sm" id="sign-out-btn">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="dashboard-main">
+    <div class="dashboard-header">
+      <div>
+        <h1 class="dashboard-title">My Projects 📁</h1>
+        <p class="dashboard-subtitle" id="project-count">Loading...</p>
+      </div>
+      <button class="btn-new-project" id="new-project-btn">+ New Project</button>
+    </div>
+
+    <div id="projects-grid" class="projects-grid">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading your projects...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- New Project Modal -->
+  <div id="new-project-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal">
+      <h2 class="modal-title">Create a New Project 🎨</h2>
+      <div class="form-group">
+        <label for="project-name">Project Name</label>
+        <input type="text" id="project-name" placeholder="My Awesome Project" maxlength="40" />
+      </div>
+      <div class="form-group">
+        <label>Project Type</label>
+        <div class="type-selector">
+          <button class="type-btn active" data-type="python">🐍 Python</button>
+          <button class="type-btn" data-type="html">🌐 HTML &amp; CSS</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="cancel-modal">Cancel</button>
+        <button class="btn-create" id="create-project-btn">Create Project 🚀</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div id="delete-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal modal-sm">
+      <h2 class="modal-title">Delete Project? 🗑️</h2>
+      <p class="modal-body-text">This will permanently delete "<span id="delete-project-name"></span>". This can't be undone!</p>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="cancel-delete">Keep it</button>
+        <button class="btn-delete" id="confirm-delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { FIREBASE_CONFIG } from "./js/config.js";
+
+    const app = initializeApp(FIREBASE_CONFIG);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const STARTER_CODE = {
+      python: `# Welcome to CodeKids! 🐍
+# Write your Python code below and click Run!
+
+name = input("What's your name? ")
+print("Hello, " + name + "! Welcome to coding! 🎉")
+
+for i in range(5):
+    print("⭐ " * (i + 1))
+`,
+      html: `<!DOCTYPE html>
+<html>
+<head>
+  <title>My Page</title>
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      font-family: sans-serif;
+    }
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 2rem 3rem;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    h1 { color: #6c3fc5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🌟 Hello World!</h1>
+    <p>Welcome to my webpage. Edit me!</p>
+  </div>
+</body>
+</html>`
+    };
+
+    let currentUser = null;
+    let selectedType = "python";
+    let deleteTargetId = null;
+
+    // Auth guard
+    onAuthStateChanged(auth, async user => {
+      if (!user) { window.location.href = "index.html"; return; }
+      currentUser = user;
+      document.getElementById("user-name").textContent = user.displayName || "Coder";
+      if (user.photoURL) document.getElementById("user-avatar").src = user.photoURL;
+      await loadProjects();
+    });
+
+    document.getElementById("sign-out-btn").addEventListener("click", () => signOut(auth));
+
+    // Project type selector
+    document.querySelectorAll(".type-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedType = btn.dataset.type;
+      });
+    });
+
+    // New project modal
+    document.getElementById("new-project-btn").addEventListener("click", () => {
+      document.getElementById("project-name").value = "";
+      document.getElementById("new-project-modal").style.display = "flex";
+      setTimeout(() => document.getElementById("project-name").focus(), 100);
+    });
+    document.getElementById("cancel-modal").addEventListener("click", () => {
+      document.getElementById("new-project-modal").style.display = "none";
+    });
+
+    document.getElementById("create-project-btn").addEventListener("click", async () => {
+      const name = document.getElementById("project-name").value.trim() || "Untitled Project";
+      const btn = document.getElementById("create-project-btn");
+      btn.disabled = true;
+      btn.textContent = "Creating...";
+
+      try {
+        const ref = await addDoc(collection(db, "users", currentUser.uid, "projects"), {
+          name,
+          type: selectedType,
+          code: STARTER_CODE[selectedType],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        document.getElementById("new-project-modal").style.display = "none";
+        window.location.href = `editor.html?id=${ref.id}&type=${selectedType}`;
+      } catch (e) {
+        console.error(e);
+        alert("Oops! Couldn't create project. Check your Firebase config.");
+        btn.disabled = false;
+        btn.textContent = "Create Project 🚀";
+      }
+    });
+
+    // Delete modal
+    document.getElementById("cancel-delete").addEventListener("click", () => {
+      document.getElementById("delete-modal").style.display = "none";
+    });
+    document.getElementById("confirm-delete").addEventListener("click", async () => {
+      if (!deleteTargetId) return;
+      await deleteDoc(doc(db, "users", currentUser.uid, "projects", deleteTargetId));
+      document.getElementById("delete-modal").style.display = "none";
+      await loadProjects();
+    });
+
+    async function loadProjects() {
+      const grid = document.getElementById("projects-grid");
+      grid.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Loading...</p></div>';
+
+      try {
+        const q = query(collection(db, "users", currentUser.uid, "projects"), orderBy("updatedAt", "desc"));
+        const snap = await getDocs(q);
+        const projects = [];
+        snap.forEach(d => projects.push({ id: d.id, ...d.data() }));
+
+        const count = document.getElementById("project-count");
+        count.textContent = projects.length === 0
+          ? "No projects yet — create your first one!"
+          : `${projects.length} project${projects.length !== 1 ? "s" : ""}`;
+
+        if (projects.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">🎨</div>
+              <h2>No projects yet!</h2>
+              <p>Click <strong>"+ New Project"</strong> to create your first coding adventure.</p>
+            </div>`;
+          return;
+        }
+
+        grid.innerHTML = projects.map(p => {
+          const icon = p.type === "html" ? "🌐" : "🐍";
+          const color = p.type === "html" ? "card-html" : "card-python";
+          const date = p.updatedAt?.toDate
+            ? p.updatedAt.toDate().toLocaleDateString()
+            : "Just now";
+          return `
+            <div class="project-card ${color}">
+              <div class="project-card-icon">${icon}</div>
+              <div class="project-card-body">
+                <h3 class="project-name">${escHtml(p.name)}</h3>
+                <p class="project-meta">${p.type === "html" ? "HTML & CSS" : "Python"} · ${date}</p>
+              </div>
+              <div class="project-card-actions">
+                <a href="editor.html?id=${p.id}&type=${p.type}" class="btn-open">Open ✏️</a>
+                <button class="btn-del" data-id="${p.id}" data-name="${escHtml(p.name)}">🗑️</button>
+              </div>
+            </div>`;
+        }).join("");
+
+        document.querySelectorAll(".btn-del").forEach(btn => {
+          btn.addEventListener("click", () => {
+            deleteTargetId = btn.dataset.id;
+            document.getElementById("delete-project-name").textContent = btn.dataset.name;
+            document.getElementById("delete-modal").style.display = "flex";
+          });
+        });
+      } catch (e) {
+        console.error(e);
+        grid.innerHTML = '<p class="error-msg">Could not load projects. Check your Firebase config.</p>';
+      }
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+  </script>
+</body>
+</html>

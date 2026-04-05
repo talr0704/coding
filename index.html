@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeKids — Learn to Code!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="landing-page">
+
+  <div class="stars" aria-hidden="true">
+    <span class="star s1">⭐</span><span class="star s2">✨</span>
+    <span class="star s3">🌟</span><span class="star s4">⭐</span>
+    <span class="star s5">✨</span><span class="star s6">🌟</span>
+  </div>
+
+  <main class="hero">
+    <div class="hero-logo">
+      <div class="logo-icon">🚀</div>
+      <h1 class="logo-text">CodeKids</h1>
+    </div>
+    <p class="hero-tagline">Write code. See it run. Save your projects. Have fun! 🎉</p>
+
+    <div class="feature-pills">
+      <span class="pill pill-python">🐍 Python</span>
+      <span class="pill pill-html">🌐 HTML &amp; CSS</span>
+      <span class="pill pill-save">💾 Save Projects</span>
+    </div>
+
+    <div class="auth-card" id="auth-card">
+      <div id="signed-out-view">
+        <p class="auth-subtitle">Sign in with your Google account to get started!</p>
+        <button class="btn-google" id="sign-in-btn">
+          <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z" fill="#FFC107"/>
+            <path d="M6.3 14.7l7.1 5.2C15.1 16.2 19.2 14 24 14c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.6 7.3 6.3 14.7z" fill="#FF3D00"/>
+            <path d="M24 46c5.5 0 10.5-1.8 14.4-4.9l-6.7-5.5C29.6 37.4 26.9 38 24 38c-6.1 0-11.2-3.8-13.1-9.2l-7.1 5.5C7.4 42 15.1 46 24 46z" fill="#4CAF50"/>
+            <path d="M44.5 20H24v8.5h11.8c-.9 3-3.3 5.5-6.4 7l6.7 5.5C40.6 37 45 31 45 24c0-1.3-.2-2.7-.5-4z" fill="#1976D2"/>
+          </svg>
+          Sign in with Google
+        </button>
+      </div>
+
+      <div id="signed-in-view" style="display:none;">
+        <div class="user-welcome">
+          <img id="user-avatar" src="" alt="avatar" class="user-avatar" />
+          <div>
+            <p class="welcome-text">Welcome back,</p>
+            <p class="user-name" id="user-display-name">Coder!</p>
+          </div>
+        </div>
+        <a href="dashboard.html" class="btn-go">Go to My Projects 🚀</a>
+        <button class="btn-signout" id="sign-out-btn">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="how-it-works">
+      <h2>How it works</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-icon">1️⃣</div>
+          <p>Sign in with Google</p>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-icon">2️⃣</div>
+          <p>Create a project</p>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-icon">3️⃣</div>
+          <p>Write &amp; run code!</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="landing-footer">
+    <p>Made with ❤️ for young coders</p>
+  </footer>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { FIREBASE_CONFIG } from "./js/config.js";
+
+    const app = initializeApp(FIREBASE_CONFIG);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+
+    document.getElementById("sign-in-btn").addEventListener("click", () => {
+      signInWithPopup(auth, provider).catch(console.error);
+    });
+
+    document.getElementById("sign-out-btn").addEventListener("click", () => {
+      signOut(auth);
+    });
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        document.getElementById("signed-out-view").style.display = "none";
+        document.getElementById("signed-in-view").style.display = "flex";
+        document.getElementById("user-display-name").textContent = user.displayName || "Coder";
+        const av = document.getElementById("user-avatar");
+        if (user.photoURL) av.src = user.photoURL;
+        else av.style.display = "none";
+      } else {
+        document.getElementById("signed-out-view").style.display = "block";
+        document.getElementById("signed-in-view").style.display = "none";
+      }
+    });
+  </script>
+</body>
+</html>
