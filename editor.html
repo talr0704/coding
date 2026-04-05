@@ -23,21 +23,22 @@
       <input type="text" id="project-title" class="project-title-input" value="Loading..." maxlength="40" />
     </div>
     <div class="editor-topbar-right">
-      <span id="save-status" class="save-status">●  Saved</span>
-      <button class="btn-run" id="run-btn">▶ Run</button>
+      <span id="save-status" class="save-status">● Saved</span>
+      <button class="btn-upload-img" id="upload-img-btn" title="Upload image to project">🖼️ Image</button>
+      <button class="btn-run"  id="run-btn">▶ Run</button>
       <button class="btn-save" id="save-btn">💾 Save</button>
     </div>
   </header>
+
+  <!-- Hidden file input for image upload -->
+  <input type="file" id="image-file-input" accept="image/*" style="display:none;" />
 
   <!-- Editor layout -->
   <div class="editor-layout">
 
     <!-- Left: code panel -->
     <div class="code-panel" id="code-panel">
-      <!-- File tabs (multi-file) -->
       <div class="file-tabs" id="file-tabs"></div>
-
-      <!-- CodeMirror mount -->
       <div class="cm-wrapper" id="cm-wrapper">
         <textarea id="code-textarea"></textarea>
       </div>
@@ -49,7 +50,7 @@
     <!-- Right: output panel -->
     <div class="output-panel" id="output-panel">
 
-      <!-- Python output -->
+      <!-- Python text output -->
       <div id="python-output-section">
         <div class="output-toolbar">
           <span class="output-label">🖥️ Output</span>
@@ -58,21 +59,39 @@
         <div id="output-area" class="output-area">
           <p class="output-hint">Click <strong>▶ Run</strong> to execute your code!</p>
         </div>
-        <!-- Input box (shown when input() is called) -->
+        <!-- input() prompt bar -->
         <div id="input-bar" class="input-bar" style="display:none;">
           <span id="input-prompt-label" class="input-prompt-label"></span>
-          <input type="text" id="python-input" class="python-input" placeholder="Type your answer..." />
+          <input type="text" id="python-input" class="python-input" placeholder="Type your answer…" />
           <button id="input-submit" class="btn-input-submit">↵</button>
         </div>
       </div>
 
+      <!-- Turtle canvas — shown automatically when turtle is imported -->
+      <div id="turtle-output-section" style="display:none;">
+        <div class="output-toolbar">
+          <span class="output-label">🐢 Turtle</span>
+          <button class="btn-clear" id="clear-turtle-btn">Clear</button>
+        </div>
+        <div id="turtle-canvas"></div>
+      </div>
+
       <!-- HTML preview -->
-      <div id="html-output-section" style="display:none;">
+      <div id="html-output-section" style="display:none; flex-direction:column; height:100%;">
         <div class="output-toolbar">
           <span class="output-label">🌐 Preview</span>
           <button class="btn-clear" id="refresh-preview-btn">↺ Refresh</button>
         </div>
         <iframe id="html-preview" class="html-preview" sandbox="allow-scripts"></iframe>
+      </div>
+
+      <!-- Project images panel -->
+      <div id="images-panel" class="collapsed">
+        <div class="images-panel-bar" id="images-panel-bar">
+          <span class="images-panel-label">🖼️ Project Images</span>
+          <span class="images-panel-toggle" id="images-toggle-icon">▲ show</span>
+        </div>
+        <div class="images-scroll" id="images-scroll"></div>
       </div>
 
     </div>
@@ -81,7 +100,7 @@
   <!-- Skulpt -->
   <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
-  <!-- CodeMirror -->
+  <!-- CodeMirror core + modes -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
@@ -90,45 +109,54 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 
-  <!-- Firebase -->
+  <!-- Firebase + App modules -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, updateDoc, serverTimestamp }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { FIREBASE_CONFIG } from "./js/config.js";
+    import { FIREBASE_CONFIG }  from "./js/config.js";
+    import { initAuth, onAuthChange }    from "./js/auth.js";
+    import { initFirestore, loadProject, saveProject, addImageToProject, removeImageFromProject } from "./js/projects.js";
+    import { initStorage, uploadProjectImage, deleteStorageFile } from "./js/uploads.js";
+    import { runPython, formatPythonError, usesTurtle } from "./js/runner.js";
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    // ── Firebase init ────────────────────────────────────────
+    const app     = initializeApp(FIREBASE_CONFIG);
+    const auth    = initAuth(app);
+    const db      = initFirestore(app);
+    const storage = initStorage(app);
 
-    const params = new URLSearchParams(location.search);
-    const projectId = params.get("id");
+    // ── URL params ───────────────────────────────────────────
+    const params      = new URLSearchParams(location.search);
+    const projectId   = params.get("id");
     const projectType = params.get("type") || "python";
 
     // ── UI refs ──────────────────────────────────────────────
-    const badge = document.getElementById("project-type-badge");
-    const titleInput = document.getElementById("project-title");
-    const saveStatus = document.getElementById("save-status");
-    const runBtn = document.getElementById("run-btn");
-    const saveBtn = document.getElementById("save-btn");
-    const outputArea = document.getElementById("output-area");
-    const inputBar = document.getElementById("input-bar");
-    const pythonInputEl = document.getElementById("python-input");
+    const badge       = document.getElementById("project-type-badge");
+    const titleInput  = document.getElementById("project-title");
+    const saveStatus  = document.getElementById("save-status");
+    const runBtn      = document.getElementById("run-btn");
+    const saveBtn     = document.getElementById("save-btn");
+    const outputArea  = document.getElementById("output-area");
+    const inputBar    = document.getElementById("input-bar");
+    const pythonInput = document.getElementById("python-input");
     const inputSubmit = document.getElementById("input-submit");
-    const inputPromptLabel = document.getElementById("input-prompt-label");
+    const inputPrompt = document.getElementById("input-prompt-label");
     const htmlPreview = document.getElementById("html-preview");
+    const turtleSection = document.getElementById("turtle-output-section");
+    const turtleCanvas  = document.getElementById("turtle-canvas");
+    const imagesPanel   = document.getElementById("images-panel");
+    const imagesScroll  = document.getElementById("images-scroll");
+    const toggleIcon    = document.getElementById("images-toggle-icon");
 
-    // ── Show correct output panel ────────────────────────────
+    // ── Project type UI ──────────────────────────────────────
     if (projectType === "html") {
       document.getElementById("python-output-section").style.display = "none";
-      document.getElementById("html-output-section").style.display = "flex";
-      badge.textContent = "🌐 HTML & CSS";
-      badge.className = "type-badge badge-html";
+      document.getElementById("html-output-section").style.display   = "flex";
+      badge.textContent  = "🌐 HTML & CSS";
+      badge.className    = "type-badge badge-html";
+      document.getElementById("upload-img-btn").style.display = "none";
     } else {
       badge.textContent = "🐍 Python";
-      badge.className = "type-badge badge-python";
+      badge.className   = "type-badge badge-python";
     }
 
     // ── CodeMirror ───────────────────────────────────────────
@@ -144,16 +172,14 @@
       lineWrapping: true,
       extraKeys: {
         "Ctrl-Enter": runCode,
-        "Cmd-Enter": runCode,
-        "Ctrl-S": saveProject,
-        "Cmd-S": saveProject,
+        "Cmd-Enter":  runCode,
+        "Ctrl-S":     triggerSave,
+        "Cmd-S":      triggerSave,
         Tab: cm => cm.execCommand("insertSoftTab")
       }
     });
 
-    // ── Multi-file support (tabs) ────────────────────────────
-    // For HTML projects: one tab. Python: one tab per file.
-    // Files stored as { filename: code } object.
+    // ── Multi-file support ───────────────────────────────────
     let files = {};
     let activeFile = "";
 
@@ -167,7 +193,6 @@
         tab.addEventListener("click", () => switchFile(filename));
         tabsEl.appendChild(tab);
       });
-
       if (projectType === "python") {
         const addBtn = document.createElement("button");
         addBtn.className = "file-tab-add";
@@ -181,48 +206,54 @@
       files[activeFile] = editor.getValue();
       activeFile = filename;
       editor.setValue(files[filename]);
-      editor.setOption("mode", filename.endsWith(".html") || filename.endsWith(".css") ? "htmlmixed" : "python");
+      editor.setOption("mode",
+        (filename.endsWith(".html") || filename.endsWith(".css")) ? "htmlmixed" : "python");
       buildFileTabs();
     }
 
     function addNewFile() {
       const name = prompt("New file name (e.g. helper.py):", "helper.py");
       if (!name) return;
-      const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "").replace(/\.+/g, ".");
-      if (!safeName || files[safeName]) return;
+      const safe = name.replace(/[^a-zA-Z0-9._-]/g, "").replace(/\.+/g, ".");
+      if (!safe || files[safe]) return;
       files[activeFile] = editor.getValue();
-      files[safeName] = "# " + safeName + "\n";
-      activeFile = safeName;
-      editor.setValue(files[safeName]);
+      files[safe] = "# " + safe + "\n";
+      activeFile = safe;
+      editor.setValue(files[safe]);
       buildFileTabs();
       markUnsaved();
     }
 
     // ── Auth guard & load project ────────────────────────────
     let currentUser = null;
-    onAuthStateChanged(auth, async user => {
+    let projectImages = [];
+
+    onAuthChange(async user => {
       if (!user) { window.location.href = "index.html"; return; }
       currentUser = user;
       if (!projectId) { window.location.href = "dashboard.html"; return; }
-      await loadProject();
+      await fetchProject();
     });
 
-    async function loadProject() {
+    async function fetchProject() {
       try {
-        const snap = await getDoc(doc(db, "users", currentUser.uid, "projects", projectId));
-        if (!snap.exists()) { window.location.href = "dashboard.html"; return; }
-        const data = snap.data();
-        titleInput.value = data.name || "Untitled";
+        const data = await loadProject(currentUser.uid, projectId);
+        if (!data) { window.location.href = "dashboard.html"; return; }
+
+        // Use title (fall back to name for legacy docs)
+        titleInput.value = data.title ?? data.name ?? "Untitled";
+        projectImages    = data.images ?? [];
 
         if (typeof data.code === "object" && data.code !== null) {
           files = data.code;
         } else {
-          const defaultFilename = projectType === "html" ? "index.html" : "main.py";
-          files = { [defaultFilename]: data.code || "" };
+          const defaultFile = projectType === "html" ? "index.html" : "main.py";
+          files = { [defaultFile]: data.code || "" };
         }
         activeFile = Object.keys(files)[0];
         editor.setValue(files[activeFile]);
         buildFileTabs();
+        renderImages();
 
         if (projectType === "html") refreshHtmlPreview();
       } catch (e) {
@@ -237,49 +268,38 @@
     function markUnsaved() {
       unsaved = true;
       saveStatus.textContent = "● Unsaved";
-      saveStatus.className = "save-status unsaved";
+      saveStatus.className   = "save-status unsaved";
     }
 
     editor.on("change", markUnsaved);
     titleInput.addEventListener("input", markUnsaved);
 
-    async function saveProject() {
+    async function triggerSave() {
       if (!currentUser || !projectId) return;
       files[activeFile] = editor.getValue();
-      saveBtn.disabled = true;
-      saveBtn.textContent = "Saving...";
+      saveBtn.disabled = true; saveBtn.textContent = "Saving...";
       try {
-        await updateDoc(doc(db, "users", currentUser.uid, "projects", projectId), {
-          name: titleInput.value.trim() || "Untitled",
-          code: files,
-          updatedAt: serverTimestamp()
+        await saveProject(currentUser.uid, projectId, {
+          title: titleInput.value.trim() || "Untitled",
+          code:  files
         });
         saveStatus.textContent = "● Saved";
-        saveStatus.className = "save-status saved";
+        saveStatus.className   = "save-status saved";
         unsaved = false;
       } catch (e) {
         console.error(e);
         saveStatus.textContent = "● Save failed";
-        saveStatus.className = "save-status error";
+        saveStatus.className   = "save-status error";
       }
-      saveBtn.disabled = false;
-      saveBtn.textContent = "💾 Save";
+      saveBtn.disabled = false; saveBtn.textContent = "💾 Save";
     }
 
-    saveBtn.addEventListener("click", saveProject);
+    saveBtn.addEventListener("click", triggerSave);
+    setInterval(() => { if (unsaved) triggerSave(); }, 30000);
+    window.addEventListener("beforeunload", e => { if (unsaved) { e.preventDefault(); e.returnValue = ""; } });
 
-    // Auto-save every 30 seconds
-    setInterval(() => { if (unsaved) saveProject(); }, 30000);
-
-    // Warn on leave
-    window.addEventListener("beforeunload", e => {
-      if (unsaved) { e.preventDefault(); e.returnValue = ""; }
-    });
-
-    // ── Run Python (Skulpt) ──────────────────────────────────
-    let inputResolve = null;
-
-    function appendOutput(text, cls = "") {
+    // ── Output helpers ───────────────────────────────────────
+    function appendText(text, cls = "") {
       const line = document.createElement("div");
       line.className = "output-line" + (cls ? " " + cls : "");
       line.textContent = text;
@@ -287,117 +307,230 @@
       outputArea.scrollTop = outputArea.scrollHeight;
     }
 
-    function skulptOutput(text) {
-      appendOutput(text);
+    function appendErrorCard(formatted) {
+      const card = document.createElement("div");
+      card.className = "output-error-card";
+      card.innerHTML = `
+        <div class="output-error-hebrew-label">${formatted.hebrewLabel}</div>
+        <div class="output-error-hebrew-hint">${formatted.hebrewHint}</div>
+        <div class="output-error-technical">${escHtml(formatted.technical)}</div>`;
+      outputArea.appendChild(card);
+      outputArea.scrollTop = outputArea.scrollHeight;
     }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    // ── input() support ──────────────────────────────────────
+    let inputResolve = null;
 
     function skulptInput(prompt) {
       return new Promise(resolve => {
         inputResolve = resolve;
-        inputPromptLabel.textContent = prompt || "";
-        inputBar.style.display = "flex";
-        pythonInputEl.value = "";
-        pythonInputEl.focus();
+        inputPrompt.textContent = prompt || "";
+        inputBar.style.display  = "flex";
+        pythonInput.value = "";
+        pythonInput.focus();
       });
     }
 
     function submitInput() {
-      const val = pythonInputEl.value;
-      appendOutput((inputPromptLabel.textContent || "") + val, "output-input-echo");
+      const val = pythonInput.value;
+      appendText((inputPrompt.textContent || "") + val, "output-input-echo");
       inputBar.style.display = "none";
       if (inputResolve) { inputResolve(val); inputResolve = null; }
     }
 
     inputSubmit.addEventListener("click", submitInput);
-    pythonInputEl.addEventListener("keydown", e => { if (e.key === "Enter") submitInput(); });
+    pythonInput.addEventListener("keydown", e => { if (e.key === "Enter") submitInput(); });
+
     document.getElementById("clear-btn").addEventListener("click", () => {
       outputArea.innerHTML = '<p class="output-hint">Click <strong>▶ Run</strong> to execute your code!</p>';
     });
 
-    async function runPython() {
+    // ── Run Python ───────────────────────────────────────────
+    async function runPythonCode() {
       files[activeFile] = editor.getValue();
+      const mainCode = files["main.py"] || editor.getValue();
+
       outputArea.innerHTML = "";
-      runBtn.disabled = true;
-      runBtn.textContent = "⏳ Running...";
+      runBtn.disabled = true; runBtn.textContent = "⏳ Running...";
 
-      // Build Skulpt filesystem from all .py files
-      const extraFiles = {};
-      Object.entries(files).forEach(([name, code]) => {
-        if (name !== "main.py" && name.endsWith(".py")) {
-          extraFiles[name] = code;
-        }
-      });
-
-      Sk.configure({
-        output: skulptOutput,
-        read: file => {
-          if (extraFiles[file]) return extraFiles[file];
-          if (Sk.builtinFiles?.files?.[file]) return Sk.builtinFiles.files[file];
-          throw new Error("File not found: " + file);
-        },
-        inputfun: skulptInput,
-        inputfunTakesPrompt: true,
-        __future__: Sk.python3
-      });
-
-      try {
-        await Sk.misceval.asyncToPromise(() =>
-          Sk.importMainWithBody("<stdin>", false, files["main.py"] || editor.getValue(), true)
-        );
-        appendOutput("\n✅ Program finished!", "output-success");
-      } catch (err) {
-        appendOutput(err.toString(), "output-error");
+      // Detect turtle usage and prepare canvas
+      const hasTurtle = usesTurtle(mainCode);
+      if (hasTurtle) {
+        turtleSection.style.display = "flex";
+        turtleCanvas.innerHTML = "";  // clear previous drawing
+      } else {
+        turtleSection.style.display = "none";
       }
 
-      runBtn.disabled = false;
-      runBtn.textContent = "▶ Run";
+      // Build extra files (all .py except main.py)
+      const extraFiles = {};
+      Object.entries(files).forEach(([name, code]) => {
+        if (name !== "main.py" && name.endsWith(".py")) extraFiles[name] = code;
+      });
+
+      const result = await runPython({
+        mainCode,
+        extraFiles,
+        onOutput: text => appendText(text),
+        onInput:  skulptInput,
+        turtleTarget: hasTurtle ? "turtle-canvas" : null
+      });
+
+      if (result.success) {
+        appendText("\n✅ Program finished!", "output-success");
+      } else {
+        appendErrorCard(formatPythonError(result.error));
+      }
+
+      runBtn.disabled = false; runBtn.textContent = "▶ Run";
     }
 
     // ── HTML Preview ─────────────────────────────────────────
     function refreshHtmlPreview() {
       files[activeFile] = editor.getValue();
-      const code = files["index.html"] || editor.getValue();
-      htmlPreview.srcdoc = code;
+      htmlPreview.srcdoc = files["index.html"] || editor.getValue();
     }
 
-    document.getElementById("refresh-preview-btn")?.addEventListener("click", refreshHtmlPreview);
+    document.getElementById("refresh-preview-btn")
+      ?.addEventListener("click", refreshHtmlPreview);
+
+    document.getElementById("clear-turtle-btn")
+      ?.addEventListener("click", () => {
+        turtleCanvas.innerHTML = "";
+      });
 
     // ── Run button ───────────────────────────────────────────
     function runCode() {
-      if (projectType === "html") {
-        refreshHtmlPreview();
-      } else {
-        runPython();
-      }
+      if (projectType === "html") refreshHtmlPreview();
+      else runPythonCode();
+    }
+    runBtn.addEventListener("click", runCode);
+
+    // ── Images panel ─────────────────────────────────────────
+    let panelOpen = false;
+
+    document.getElementById("images-panel-bar").addEventListener("click", () => {
+      panelOpen = !panelOpen;
+      imagesPanel.classList.toggle("collapsed", !panelOpen);
+      toggleIcon.textContent = panelOpen ? "▼ hide" : "▲ show";
+    });
+
+    function renderImages() {
+      imagesScroll.innerHTML = "";
+      projectImages.forEach((img, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className = "image-thumb-wrap";
+        wrap.title = img.name;
+
+        const imgEl = document.createElement("img");
+        imgEl.src = img.url;
+        imgEl.alt = img.name;
+        imgEl.addEventListener("click", () => window.open(img.url, "_blank"));
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "image-thumb-delete";
+        delBtn.textContent = "✕";
+        delBtn.title = "Delete image";
+        delBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete "${img.name}"?`)) return;
+          try {
+            await deleteStorageFile(img.storagePath);
+          } catch (_) { /* file may already be gone */ }
+          await removeImageFromProject(currentUser.uid, projectId, img);
+          projectImages.splice(idx, 1);
+          renderImages();
+        });
+
+        wrap.appendChild(imgEl);
+        wrap.appendChild(delBtn);
+        imagesScroll.appendChild(wrap);
+      });
+
+      // Show panel bar count
+      const label = document.querySelector(".images-panel-label");
+      if (label) label.textContent = `🖼️ Project Images (${projectImages.length})`;
     }
 
-    runBtn.addEventListener("click", runCode);
+    // ── Image upload ─────────────────────────────────────────
+    const imageFileInput = document.getElementById("image-file-input");
+
+    document.getElementById("upload-img-btn").addEventListener("click", () => {
+      imageFileInput.value = "";
+      imageFileInput.click();
+    });
+
+    imageFileInput.addEventListener("change", async () => {
+      const file = imageFileInput.files[0];
+      if (!file) return;
+
+      // Validate type and size (max 5 MB)
+      if (!file.type.startsWith("image/")) { alert("Please select an image file."); return; }
+      if (file.size > 5 * 1024 * 1024) { alert("Image must be smaller than 5 MB."); return; }
+
+      // Show progress placeholder
+      const progressEl = document.createElement("div");
+      progressEl.className = "upload-progress";
+      progressEl.innerHTML = `
+        <div class="upload-progress-bar"><div class="upload-progress-fill" style="width:0%"></div></div>
+        <span class="upload-progress-pct">0%</span>`;
+      imagesScroll.appendChild(progressEl);
+      if (!panelOpen) {
+        panelOpen = true;
+        imagesPanel.classList.remove("collapsed");
+        toggleIcon.textContent = "▼ hide";
+      }
+
+      const fillEl = progressEl.querySelector(".upload-progress-fill");
+      const pctEl  = progressEl.querySelector(".upload-progress-pct");
+
+      try {
+        const meta = await uploadProjectImage(
+          currentUser.uid, projectId, file,
+          pct => { fillEl.style.width = pct + "%"; pctEl.textContent = pct + "%"; }
+        );
+        await addImageToProject(currentUser.uid, projectId, meta);
+        projectImages.push({ ...meta, uploadedAt: new Date().toISOString() });
+      } catch (e) {
+        console.error(e);
+        alert("Upload failed: " + e.message);
+      } finally {
+        progressEl.remove();
+        renderImages();
+      }
+    });
 
     // ── Resize handle ────────────────────────────────────────
     const resizeHandle = document.getElementById("resize-handle");
-    const codePanel = document.getElementById("code-panel");
-    const outputPanel = document.getElementById("output-panel");
+    const codePanel    = document.getElementById("code-panel");
+    const outputPanel  = document.getElementById("output-panel");
     let isResizing = false;
 
-    resizeHandle.addEventListener("mousedown", e => {
+    resizeHandle.addEventListener("mousedown", () => {
       isResizing = true;
-      document.body.style.cursor = "col-resize";
+      document.body.style.cursor    = "col-resize";
       document.body.style.userSelect = "none";
     });
     document.addEventListener("mousemove", e => {
       if (!isResizing) return;
       const layout = document.querySelector(".editor-layout");
-      const rect = layout.getBoundingClientRect();
-      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const rect   = layout.getBoundingClientRect();
+      const pct    = ((e.clientX - rect.left) / rect.width) * 100;
       const clamped = Math.min(80, Math.max(20, pct));
-      codePanel.style.flex = "none";
+      codePanel.style.flex  = "none";
       codePanel.style.width = clamped + "%";
       outputPanel.style.flex = "1";
       editor.refresh();
     });
     document.addEventListener("mouseup", () => {
       isResizing = false;
-      document.body.style.cursor = "";
+      document.body.style.cursor    = "";
       document.body.style.userSelect = "";
     });
   </script>
