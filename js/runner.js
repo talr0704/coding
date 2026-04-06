@@ -1,6 +1,6 @@
 // ── runner.js ────────────────────────────────────────────────────────────────
-// Skulpt Python execution with Turtle graphics + Hebrew-friendly error messages
-// Requires: skulpt.min.js and skulkt-stdlib.js loaded as global scripts first.
+// Skulpt Python execution with custom TurtleEngine + Hebrew-friendly errors
+// Requires: skulpt.min.js, skulkt-stdlib.js, and turtle-engine.js loaded first.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Hebrew error catalogue ───────────────────────────────────────────────────
@@ -67,61 +67,276 @@ const HEBREW_ERRORS = {
   }
 };
 
-/**
- * Formats a Skulpt error into a Hebrew-friendly object.
- * @param {Error|string} err
- * @returns {{ hebrewLabel: string, hebrewHint: string, technical: string }}
- */
 export function formatPythonError(err) {
   const errStr = err?.toString() ?? String(err);
-
   for (const [type, info] of Object.entries(HEBREW_ERRORS)) {
     if (errStr.includes(type)) {
       const lineMatch = errStr.match(/on line (\d+)/i) ?? errStr.match(/line (\d+)/i);
       const lineTag = lineMatch ? ` (שורה ${lineMatch[1]})` : "";
-      return {
-        hebrewLabel: info.label + lineTag,
-        hebrewHint: info.hint,
-        technical: errStr
-      };
+      return { hebrewLabel: info.label + lineTag, hebrewHint: info.hint, technical: errStr };
     }
   }
-
-  // Generic fallback
   const lineMatch = errStr.match(/on line (\d+)/i) ?? errStr.match(/line (\d+)/i);
   const lineTag = lineMatch ? ` (שורה ${lineMatch[1]})` : "";
-  return {
-    hebrewLabel: "❌ שגיאה בזמן ריצה" + lineTag,
-    hebrewHint: "אירעה שגיאה בעת הרצת הקוד.",
-    technical: errStr
-  };
+  return { hebrewLabel: "❌ שגיאה בזמן ריצה" + lineTag, hebrewHint: "אירעה שגיאה בעת הרצת הקוד.", technical: errStr };
 }
 
-/**
- * Detects whether code uses the turtle module.
- * @param {string} code
- */
 export function usesTurtle(code) {
-  return /\bimport\s+turtle\b/.test(code) ||
-         /\bfrom\s+turtle\b/.test(code);
+  return /\bimport\s+turtle\b/.test(code) || /\bfrom\s+turtle\b/.test(code);
 }
 
+// ── TurtleEngine Skulkt bridge ───────────────────────────────────────────────
+// Overrides Skulkt's built-in turtle module with our custom engine.
+
+let _engine = null;   // TurtleEngine instance (set per run)
+
 /**
- * Configures Skulpt and runs Python code.
- *
- * @param {object} opts
- * @param {string}   opts.mainCode       - The code of main.py
- * @param {object}   opts.extraFiles     - { filename: code } for additional .py files
- * @param {function} opts.onOutput       - Called with each output string
- * @param {function} opts.onInput        - Called with prompt string, returns Promise<string>
- * @param {string|null} opts.turtleTarget - ID of the div for Turtle canvas, or null
- * @returns {Promise<{ success: boolean, error?: object }>}
+ * Build a Skulkt external library module that delegates all calls to TurtleEngine.
+ * Called once per runPython() invocation that uses turtle.
  */
-export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, turtleTarget = null }) {
-  if (turtleTarget) {
-    Sk.TurtleGraphics = { target: turtleTarget, width: 480, height: 480 };
-  } else {
-    delete Sk.TurtleGraphics;
+function _buildTurtleModule(engine) {
+  _engine = engine;
+  const id = engine.defaultId;
+
+  // Helper: wrap a JS function as a Skulkt built-in that accepts Python args
+  function _fn(fn) {
+    return new Sk.builtin.func(fn);
+  }
+
+  // Unwrap a Skulkt value to a JS primitive
+  function _js(v) {
+    if (v === undefined || v === null) return null;
+    if (v instanceof Sk.builtin.str)   return v.v;
+    if (v instanceof Sk.builtin.float_) return v.v;
+    if (v instanceof Sk.builtin.int_)   return v.v;
+    if (typeof v.v !== 'undefined')     return v.v;
+    return v;
+  }
+
+  const mod = {};
+
+  // ── movement ──────────────────────────────────────────────────────────────
+  mod.forward  = mod.fd = _fn((_dist)       => { engine.forward(id, _js(_dist)); });
+  mod.backward = mod.bk = mod.back = _fn((_dist) => { engine.backward(id, _js(_dist)); });
+  mod.right    = mod.rt = _fn((_angle)      => { engine.right(id, _js(_angle)); });
+  mod.left     = mod.lt = _fn((_angle)      => { engine.left(id, _js(_angle)); });
+  mod.goto     = mod.setpos = mod.setposition = _fn((_x, _y) => {
+    engine.goto(id, _js(_x), _y !== undefined ? _js(_y) : 0);
+  });
+  mod.setx        = _fn((_x)     => { engine.setx(id, _js(_x)); });
+  mod.sety        = _fn((_y)     => { engine.sety(id, _js(_y)); });
+  mod.setheading  = mod.seth = _fn((_a) => { engine.setheading(id, _js(_a)); });
+  mod.home        = _fn(()       => { engine.goto(id, 0, 0); engine.setheading(id, 0); });
+
+  // ── pen ───────────────────────────────────────────────────────────────────
+  mod.penup   = mod.pu = mod.up   = _fn(() => { engine.penup(id); });
+  mod.pendown = mod.pd = mod.down = _fn(() => { engine.pendown(id); });
+  mod.pensize = mod.width = _fn((_w) => { engine.width(id, _js(_w)); });
+  mod.pencolor  = _fn((_c)        => { engine.pencolor(id, _js(_c)); });
+  mod.fillcolor = _fn((_c)        => { engine.fillcolor(id, _js(_c)); });
+  mod.color     = _fn((_p, _f)   => {
+    const p = _js(_p), f = _f !== undefined ? _js(_f) : null;
+    engine.color(id, p, f);
+  });
+  mod.begin_fill = _fn(() => { engine.beginFill(id); });
+  mod.end_fill   = _fn(() => { engine.endFill(id); });
+
+  // ── shape / visibility ────────────────────────────────────────────────────
+  mod.shape      = _fn((_n) => {
+    if (_n === undefined) return new Sk.builtin.str(engine._turtles[id].shape);
+    engine.shape(id, _js(_n));
+  });
+  mod.addshape   = mod.register_shape = _fn((_n, _url) => {
+    engine.addshape(_js(_n), _url !== undefined ? _js(_url) : null);
+  });
+  mod.hideturtle = mod.ht = _fn(() => { engine.hideturtle(id); });
+  mod.showturtle = mod.st = _fn(() => { engine.showturtle(id); });
+  mod.isvisible  = _fn(() => new Sk.builtin.bool(engine._turtles[id].visible));
+
+  // ── canvas / screen ───────────────────────────────────────────────────────
+  mod.bgcolor   = _fn((_c) => { engine.bgcolor(_js(_c)); });
+  mod.clear     = mod.clearscreen = _fn(() => { engine.clearAll(); });
+  mod.reset     = mod.resetscreen = _fn(() => { engine.resetAll(); });
+  mod.Screen    = _fn(() => {
+    // Return a dummy screen object with common methods
+    const screen = new Sk.builtin.object();
+    screen.tp$getattr = (name) => {
+      const methods = {
+        bgcolor:  _fn((_c) => { engine.bgcolor(_js(_c)); }),
+        setup:    _fn(() => {}),
+        title:    _fn(() => {}),
+        exitonclick: _fn(() => {}),
+        tracer:   _fn(() => {}),
+        update:   _fn(() => {}),
+        mainloop: _fn(() => {}),
+      };
+      return methods[name] ?? Sk.builtin.none.none$;
+    };
+    return screen;
+  });
+  mod.tracer    = _fn(() => {});   // no-op (we draw immediately)
+  mod.update    = _fn(() => {});
+  mod.done      = mod.mainloop = _fn(() => {});
+  mod.exitonclick = _fn(() => {});
+  mod.title     = _fn(() => {});
+  mod.setup     = _fn(() => {});
+
+  // ── stamp / write ─────────────────────────────────────────────────────────
+  mod.stamp  = _fn(() => { engine.stamp(id); });
+  mod.write  = _fn((_txt, _move, _align, _font) => {
+    engine.write(id, _js(_txt), _align ? _js(_align) : 'left');
+  });
+
+  // ── state getters ─────────────────────────────────────────────────────────
+  mod.xcor     = _fn(() => new Sk.builtin.float_(engine.xcor(id)));
+  mod.ycor     = _fn(() => new Sk.builtin.float_(engine.ycor(id)));
+  mod.heading  = _fn(() => new Sk.builtin.float_(engine._turtles[id].heading));
+  mod.position = mod.pos = _fn(() => {
+    return new Sk.builtin.tuple([
+      new Sk.builtin.float_(engine.xcor(id)),
+      new Sk.builtin.float_(engine.ycor(id))
+    ]);
+  });
+  mod.isdown   = _fn(() => new Sk.builtin.bool(engine._turtles[id].penDown));
+  mod.distance = _fn((_x, _y) => {
+    const cx = engine.xcor(id), cy = engine.ycor(id);
+    const tx = _js(_x), ty = _y !== undefined ? _js(_y) : 0;
+    return new Sk.builtin.float_(Math.sqrt((cx-tx)**2 + (cy-ty)**2));
+  });
+  mod.towards  = _fn((_x, _y) => {
+    const cx = engine.xcor(id), cy = engine.ycor(id);
+    const tx = _js(_x), ty = _y !== undefined ? _js(_y) : 0;
+    const a = Math.atan2(cy - ty, tx - cx) * 180 / Math.PI;
+    return new Sk.builtin.float_(((a % 360) + 360) % 360);
+  });
+  mod.getscreen = _fn(() => Sk.builtin.none.none$);
+  mod.speed     = _fn(() => {});   // speed control not needed in synchronous mode
+  mod.circle    = _fn((_r, _ext, _steps) => {
+    // Approximate a circle/arc via polygon
+    const r = _js(_r);
+    const extent = _ext !== undefined ? _js(_ext) : 360;
+    const steps  = _steps !== undefined ? _js(_steps) : Math.max(8, Math.abs(Math.round(r / 2)));
+    const stepAngle = extent / steps;
+    const stepLen   = 2 * Math.abs(r) * Math.sin(Math.PI * stepAngle / 360);
+    const turnDir   = r >= 0 ? 1 : -1;
+    engine.left(id, stepAngle / 2 * turnDir);
+    for (let i = 0; i < steps; i++) {
+      engine.forward(id, stepLen);
+      engine.left(id, stepAngle * turnDir);
+    }
+    engine.right(id, stepAngle / 2 * turnDir);
+  });
+
+  // ── Turtle class (OOP interface) ──────────────────────────────────────────
+  mod.Turtle = new Sk.builtin.func(() => {
+    const tid = engine.newTurtle();
+    const obj = new Sk.builtin.object();
+
+    const _m = (fn) => new Sk.builtin.func(fn);
+    const methods = {
+      forward:  _m((d)     => engine.forward(tid, _js(d))),
+      fd:       _m((d)     => engine.forward(tid, _js(d))),
+      backward: _m((d)     => engine.backward(tid, _js(d))),
+      bk:       _m((d)     => engine.backward(tid, _js(d))),
+      back:     _m((d)     => engine.backward(tid, _js(d))),
+      right:    _m((a)     => engine.right(tid, _js(a))),
+      rt:       _m((a)     => engine.right(tid, _js(a))),
+      left:     _m((a)     => engine.left(tid, _js(a))),
+      lt:       _m((a)     => engine.left(tid, _js(a))),
+      goto:     _m((x, y)  => engine.goto(tid, _js(x), y !== undefined ? _js(y) : 0)),
+      setpos:   _m((x, y)  => engine.goto(tid, _js(x), y !== undefined ? _js(y) : 0)),
+      setx:     _m((x)     => engine.setx(tid, _js(x))),
+      sety:     _m((y)     => engine.sety(tid, _js(y))),
+      setheading: _m((a)   => engine.setheading(tid, _js(a))),
+      seth:     _m((a)     => engine.setheading(tid, _js(a))),
+      home:     _m(()      => { engine.goto(tid, 0, 0); engine.setheading(tid, 0); }),
+      penup:    _m(()      => engine.penup(tid)),
+      pu:       _m(()      => engine.penup(tid)),
+      up:       _m(()      => engine.penup(tid)),
+      pendown:  _m(()      => engine.pendown(tid)),
+      pd:       _m(()      => engine.pendown(tid)),
+      down:     _m(()      => engine.pendown(tid)),
+      pensize:  _m((w)     => engine.width(tid, _js(w))),
+      width:    _m((w)     => engine.width(tid, _js(w))),
+      pencolor: _m((c)     => engine.pencolor(tid, _js(c))),
+      fillcolor:_m((c)     => engine.fillcolor(tid, _js(c))),
+      color:    _m((p, f)  => engine.color(tid, _js(p), f !== undefined ? _js(f) : null)),
+      begin_fill: _m(()    => engine.beginFill(tid)),
+      end_fill:   _m(()    => engine.endFill(tid)),
+      shape:    _m((n)     => { if (n !== undefined) engine.shape(tid, _js(n)); }),
+      hideturtle: _m(()    => engine.hideturtle(tid)),
+      ht:       _m(()      => engine.hideturtle(tid)),
+      showturtle: _m(()    => engine.showturtle(tid)),
+      st:       _m(()      => engine.showturtle(tid)),
+      isvisible: _m(()     => new Sk.builtin.bool(engine._turtles[tid].visible)),
+      stamp:    _m(()      => engine.stamp(tid)),
+      write:    _m((t, mv, al) => engine.write(tid, _js(t), al ? _js(al) : 'left')),
+      xcor:     _m(()      => new Sk.builtin.float_(engine.xcor(tid))),
+      ycor:     _m(()      => new Sk.builtin.float_(engine.ycor(tid))),
+      heading:  _m(()      => new Sk.builtin.float_(engine._turtles[tid].heading)),
+      pos:      _m(()      => new Sk.builtin.tuple([new Sk.builtin.float_(engine.xcor(tid)), new Sk.builtin.float_(engine.ycor(tid))])),
+      position: _m(()      => new Sk.builtin.tuple([new Sk.builtin.float_(engine.xcor(tid)), new Sk.builtin.float_(engine.ycor(tid))])),
+      isdown:   _m(()      => new Sk.builtin.bool(engine._turtles[tid].penDown)),
+      speed:    _m(()      => {}),
+      clear:    _m(()      => engine.clearTurtle(tid)),
+      reset:    _m(()      => engine.resetTurtle(tid)),
+      circle:   _m((r, ext, steps) => {
+        const rv = _js(r);
+        const extent = ext !== undefined ? _js(ext) : 360;
+        const nsteps = steps !== undefined ? _js(steps) : Math.max(8, Math.abs(Math.round(rv / 2)));
+        const sa = extent / nsteps;
+        const sl = 2 * Math.abs(rv) * Math.sin(Math.PI * sa / 360);
+        const dir = rv >= 0 ? 1 : -1;
+        engine.left(tid, sa / 2 * dir);
+        for (let i = 0; i < nsteps; i++) { engine.forward(tid, sl); engine.left(tid, sa * dir); }
+        engine.right(tid, sa / 2 * dir);
+      }),
+      distance: _m((x, y)  => {
+        const cx = engine.xcor(tid), cy = engine.ycor(tid);
+        return new Sk.builtin.float_(Math.sqrt((_js(x)-cx)**2 + ((y !== undefined ? _js(y) : 0)-cy)**2));
+      }),
+      towards:  _m((x, y)  => {
+        const cx = engine.xcor(tid), cy = engine.ycor(tid);
+        const a = Math.atan2(cy - (y !== undefined ? _js(y) : 0), _js(x) - cx) * 180 / Math.PI;
+        return new Sk.builtin.float_(((a % 360) + 360) % 360);
+      }),
+      getscreen: _m(()     => Sk.builtin.none.none$),
+    };
+
+    obj.tp$getattr = (name) => {
+      if (name in methods) return methods[name];
+      return Sk.builtin.none.none$;
+    };
+
+    return obj;
+  });
+
+  return mod;
+}
+
+// ── Main runner ───────────────────────────────────────────────────────────────
+
+/**
+ * @param {object} opts
+ * @param {string}   opts.mainCode
+ * @param {object}   opts.extraFiles
+ * @param {function} opts.onOutput
+ * @param {function} opts.onInput
+ * @param {string|null} opts.turtleTarget   div id for TurtleEngine
+ * @param {object|null} opts.projectImages  { cleanName: url } for shape pre-registration
+ */
+export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, turtleTarget = null, projectImages = null }) {
+  // Build TurtleEngine and inject turtle module before Skulkt runs
+  let engine = null;
+  if (turtleTarget && window.TurtleEngine) {
+    const container = document.getElementById(turtleTarget);
+    if (container) {
+      engine = new window.TurtleEngine(container);
+      _engine = engine;
+      if (projectImages) {
+        Object.entries(projectImages).forEach(([name, url]) => engine.addshape(name, url));
+      }
+    }
   }
 
   Sk.configure({
@@ -135,6 +350,26 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
     inputfunTakesPrompt: true,
     __future__: Sk.python3
   });
+
+  // Pre-inject our turtle module into Skulkt's sys.modules so any
+  // "import turtle" or "from turtle import ..." will get our bridge.
+  if (engine) {
+    const turtleMod = new Sk.builtin.module();
+    turtleMod.$d = _buildTurtleModule(engine);
+    if (!Sk.sysmodules) Sk.sysmodules = new Sk.builtin.dict([]);
+    Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str('turtle'), turtleMod);
+  } else {
+    // Remove any cached turtle module from a previous run
+    if (Sk.sysmodules) {
+      try { Sk.sysmodules.mp$del_subscript(new Sk.builtin.str('turtle')); } catch (_) {}
+    }
+    // Fall back to Skulkt's built-in turtle (requires TurtleGraphics config)
+    if (turtleTarget) {
+      Sk.TurtleGraphics = { target: turtleTarget, width: 480, height: 480 };
+    } else {
+      delete Sk.TurtleGraphics;
+    }
+  }
 
   try {
     await Sk.misceval.asyncToPromise(() =>

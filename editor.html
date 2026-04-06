@@ -71,7 +71,18 @@
       <div id="turtle-output-section" style="display:none;">
         <div class="output-toolbar">
           <span class="output-label">🐢 Turtle</span>
-          <button class="btn-clear" id="clear-turtle-btn">Clear</button>
+          <div class="turtle-toolbar-right">
+            <label class="turtle-shape-label" for="turtle-shape-select">צורה:</label>
+            <select id="turtle-shape-select" class="turtle-shape-select">
+              <option value="classic">classic</option>
+              <option value="arrow">arrow</option>
+              <option value="turtle" selected>turtle</option>
+              <option value="circle">circle</option>
+              <option value="square">square</option>
+              <option value="triangle">triangle</option>
+            </select>
+            <button class="btn-clear" id="clear-turtle-btn">Clear</button>
+          </div>
         </div>
         <div id="turtle-canvas"></div>
       </div>
@@ -100,6 +111,8 @@
   <!-- Skulpt -->
   <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"></script>
+  <!-- Custom Turtle Engine -->
+  <script src="js/turtle-engine.js"></script>
   <!-- CodeMirror core + modes -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
@@ -141,9 +154,10 @@
     const inputSubmit = document.getElementById("input-submit");
     const inputPrompt = document.getElementById("input-prompt-label");
     const htmlPreview = document.getElementById("html-preview");
-    const turtleSection = document.getElementById("turtle-output-section");
-    const turtleCanvas  = document.getElementById("turtle-canvas");
-    const imagesPanel   = document.getElementById("images-panel");
+    const turtleSection     = document.getElementById("turtle-output-section");
+    const turtleCanvas      = document.getElementById("turtle-canvas");
+    const turtleShapeSelect = document.getElementById("turtle-shape-select");
+    const imagesPanel       = document.getElementById("images-panel");
     const imagesScroll  = document.getElementById("images-scroll");
     const toggleIcon    = document.getElementById("images-toggle-icon");
 
@@ -363,7 +377,7 @@
       const hasTurtle = usesTurtle(mainCode);
       if (hasTurtle) {
         turtleSection.style.display = "flex";
-        turtleCanvas.innerHTML = "";  // clear previous drawing
+        turtleCanvas.innerHTML = "";  // TurtleEngine will rebuild canvases
       } else {
         turtleSection.style.display = "none";
       }
@@ -374,12 +388,20 @@
         if (name !== "main.py" && name.endsWith(".py")) extraFiles[name] = code;
       });
 
+      // Build projectImages map { cleanName: url } for TurtleEngine shape registration
+      const imgMap = {};
+      projectImages.forEach(img => {
+        const clean = img.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        imgMap[clean] = img.url;
+      });
+
       const result = await runPython({
         mainCode,
         extraFiles,
         onOutput: text => appendText(text),
         onInput:  skulptInput,
-        turtleTarget: hasTurtle ? "turtle-canvas" : null
+        turtleTarget: hasTurtle ? "turtle-canvas" : null,
+        projectImages: hasTurtle ? imgMap : null
       });
 
       if (result.success) {
@@ -402,8 +424,14 @@
 
     document.getElementById("clear-turtle-btn")
       ?.addEventListener("click", () => {
-        turtleCanvas.innerHTML = "";
+        const eng = turtleCanvas._tkEngine;
+        if (eng) { eng.clearAll(); } else { turtleCanvas.innerHTML = ""; }
       });
+
+    turtleShapeSelect?.addEventListener("change", () => {
+      const eng = turtleCanvas._tkEngine;
+      if (eng) eng.setShapeFromUI(turtleShapeSelect.value);
+    });
 
     // ── Run button ───────────────────────────────────────────
     function runCode() {
