@@ -378,9 +378,31 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
     }
   }
 
+  // Store engine globally so the $builtinmodule JS stub can reference it
+  if (engine) {
+    window._tkEngine = engine;
+    window._tkBuildModule = () => _buildTurtleModule(engine);
+  } else {
+    window._tkEngine = null;
+    delete Sk.TurtleGraphics;
+  }
+
+  // Clear turtle from Skulkt's module cache so it re-runs our $builtinmodule stub
+  if (Sk.sysmodules) {
+    try { Sk.sysmodules.mp$del_subscript(new Sk.builtin.str('turtle')); } catch (_) {}
+  }
+
   Sk.configure({
     output: onOutput,
     read: (file) => {
+      // Intercept Skulkt's turtle stdlib with our JS bridge.
+      // Skulkt loads 'src/lib/turtle.js' as a $builtinmodule JS file.
+      // We return our own JS stub that delegates to the TurtleEngine.
+      if (file === 'src/lib/turtle.js' && window._tkEngine) {
+        return `var $builtinmodule = function(name) {
+          return window._tkBuildModule ? window._tkBuildModule() : {};
+        };`;
+      }
       if (extraFiles[file] !== undefined) return extraFiles[file];
       if (Sk.builtinFiles?.files?.[file]) return Sk.builtinFiles.files[file];
       throw new Error("File not found: " + file);
@@ -390,27 +412,6 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
     __future__: Sk.python3
   });
 
-  // Override Sk.importModule to intercept 'turtle' and return our bridge module.
-  // This is safer than pre-injecting into sysmodules (which may not exist yet).
-  let _origImportModule = null;
-  if (engine) {
-    _origImportModule = Sk.importModule;
-    Sk.importModule = function(name, dumpJS, canSuspend) {
-      if (name === 'turtle') {
-        const mod = new Sk.builtin.module();
-        mod.$d = _buildTurtleModule(engine);
-        // Cache in sysmodules if available to avoid re-building
-        if (Sk.sysmodules) {
-          try { Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str('turtle'), mod); } catch (_) {}
-        }
-        return mod;
-      }
-      return _origImportModule.apply(this, arguments);
-    };
-  } else {
-    delete Sk.TurtleGraphics;
-  }
-
   try {
     await Sk.misceval.asyncToPromise(() =>
       Sk.importMainWithBody("<stdin>", false, mainCode, true)
@@ -419,7 +420,7 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
   } catch (err) {
     return { success: false, error: err };
   } finally {
-    // Restore original importModule
-    if (_origImportModule) Sk.importModule = _origImportModule;
+    window._tkEngine = null;
+    window._tkBuildModule = null;
   }
 }
