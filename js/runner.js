@@ -351,24 +351,25 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
     __future__: Sk.python3
   });
 
-  // Pre-inject our turtle module into Skulkt's sys.modules so any
-  // "import turtle" or "from turtle import ..." will get our bridge.
+  // Override Sk.importModule to intercept 'turtle' and return our bridge module.
+  // This is safer than pre-injecting into sysmodules (which may not exist yet).
+  let _origImportModule = null;
   if (engine) {
-    const turtleMod = new Sk.builtin.module();
-    turtleMod.$d = _buildTurtleModule(engine);
-    if (!Sk.sysmodules) Sk.sysmodules = new Sk.builtin.dict([]);
-    Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str('turtle'), turtleMod);
+    _origImportModule = Sk.importModule;
+    Sk.importModule = function(name, dumpJS, canSuspend) {
+      if (name === 'turtle') {
+        const mod = new Sk.builtin.module();
+        mod.$d = _buildTurtleModule(engine);
+        // Cache in sysmodules if available to avoid re-building
+        if (Sk.sysmodules) {
+          try { Sk.sysmodules.mp$ass_subscript(new Sk.builtin.str('turtle'), mod); } catch (_) {}
+        }
+        return mod;
+      }
+      return _origImportModule.apply(this, arguments);
+    };
   } else {
-    // Remove any cached turtle module from a previous run
-    if (Sk.sysmodules) {
-      try { Sk.sysmodules.mp$del_subscript(new Sk.builtin.str('turtle')); } catch (_) {}
-    }
-    // Fall back to Skulkt's built-in turtle (requires TurtleGraphics config)
-    if (turtleTarget) {
-      Sk.TurtleGraphics = { target: turtleTarget, width: 480, height: 480 };
-    } else {
-      delete Sk.TurtleGraphics;
-    }
+    delete Sk.TurtleGraphics;
   }
 
   try {
@@ -378,5 +379,8 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
     return { success: true };
   } catch (err) {
     return { success: false, error: err };
+  } finally {
+    // Restore original importModule
+    if (_origImportModule) Sk.importModule = _origImportModule;
   }
 }

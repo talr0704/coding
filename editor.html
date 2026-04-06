@@ -82,6 +82,7 @@
               <option value="triangle">triangle</option>
             </select>
             <button class="btn-clear" id="clear-turtle-btn">Clear</button>
+            <button class="btn-clear" id="reset-turtle-btn">Reset</button>
           </div>
         </div>
         <div id="turtle-canvas"></div>
@@ -432,6 +433,12 @@
       const eng = turtleCanvas._tkEngine;
       if (eng) eng.setShapeFromUI(turtleShapeSelect.value);
     });
+
+    document.getElementById("reset-turtle-btn")
+      ?.addEventListener("click", () => {
+        const eng = turtleCanvas._tkEngine;
+        if (eng) { eng.resetAll(); } else { turtleCanvas.innerHTML = ""; }
+      });
 
     // ── Run button ───────────────────────────────────────────
     function runCode() {
