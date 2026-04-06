@@ -144,10 +144,24 @@ function _buildTurtleModule(engine) {
   // ── shape / visibility ────────────────────────────────────────────────────
   mod.shape      = _fn((_n) => {
     if (_n === undefined) return new Sk.builtin.str(engine._turtles[id].shape);
-    engine.shape(id, _js(_n));
+    const name = _js(_n);
+    // If a URL is passed directly, auto-register it under a derived name
+    if (/^https?:\/\//.test(name) || name.startsWith('data:')) {
+      const autoName = engine.registerProjectImage(name, name);
+      engine.shape(id, autoName);
+    } else {
+      engine.shape(id, name);
+    }
   });
   mod.addshape   = mod.register_shape = _fn((_n, _url) => {
-    engine.addshape(_js(_n), _url !== undefined ? _js(_url) : null);
+    const n = _js(_n);
+    const url = _url !== undefined ? _js(_url) : null;
+    // If only one arg given and it looks like a URL, use last path segment as name
+    if (!url && (/^https?:\/\//.test(n) || n.startsWith('data:'))) {
+      engine.registerProjectImage(n, n);
+    } else {
+      engine.addshape(n, url);
+    }
   });
   mod.hideturtle = mod.ht = _fn(() => { engine.hideturtle(id); });
   mod.showturtle = mod.st = _fn(() => { engine.showturtle(id); });
@@ -158,19 +172,37 @@ function _buildTurtleModule(engine) {
   mod.clear     = mod.clearscreen = _fn(() => { engine.clearAll(); });
   mod.reset     = mod.resetscreen = _fn(() => { engine.resetAll(); });
   mod.Screen    = _fn(() => {
-    // Return a dummy screen object with common methods
     const screen = new Sk.builtin.object();
     screen.tp$getattr = (name) => {
       const methods = {
-        bgcolor:  _fn((_c) => { engine.bgcolor(_js(_c)); }),
-        setup:    _fn(() => {}),
-        title:    _fn(() => {}),
+        bgcolor:   _fn((_c) => { engine.bgcolor(_js(_c)); }),
+        setup:     _fn(() => {}),
+        title:     _fn(() => {}),
         exitonclick: _fn(() => {}),
-        tracer:   _fn(() => {}),
-        update:   _fn(() => {}),
-        mainloop: _fn(() => {}),
+        tracer:    _fn(() => {}),
+        update:    _fn(() => {}),
+        mainloop:  _fn(() => {}),
+        clear:     _fn(() => { engine.clearAll(); }),
+        reset:     _fn(() => { engine.resetAll(); }),
+        // addshape / register_shape on Screen object
+        addshape:  _fn((_n, _url) => {
+          const n = _js(_n), url = _url !== undefined ? _js(_url) : null;
+          if (!url && (/^https?:\/\//.test(n) || n.startsWith('data:'))) {
+            engine.registerProjectImage(n, n);
+          } else {
+            engine.addshape(n, url);
+          }
+        }),
+        register_shape: _fn((_n, _url) => {
+          const n = _js(_n), url = _url !== undefined ? _js(_url) : null;
+          if (!url && (/^https?:\/\//.test(n) || n.startsWith('data:'))) {
+            engine.registerProjectImage(n, n);
+          } else {
+            engine.addshape(n, url);
+          }
+        }),
       };
-      return methods[name] ?? Sk.builtin.none.none$;
+      return methods[name] ?? new Sk.builtin.func(() => Sk.builtin.none.none$);
     };
     return screen;
   });
@@ -263,7 +295,14 @@ function _buildTurtleModule(engine) {
       color:    _m((p, f)  => engine.color(tid, _js(p), f !== undefined ? _js(f) : null)),
       begin_fill: _m(()    => engine.beginFill(tid)),
       end_fill:   _m(()    => engine.endFill(tid)),
-      shape:    _m((n)     => { if (n !== undefined) engine.shape(tid, _js(n)); }),
+      shape:    _m((n)     => {
+        if (n === undefined) return;
+        const name = _js(n);
+        if (/^https?:\/\//.test(name) || name.startsWith('data:')) {
+          const autoName = engine.registerProjectImage(name, name);
+          engine.shape(tid, autoName);
+        } else { engine.shape(tid, name); }
+      }),
       hideturtle: _m(()    => engine.hideturtle(tid)),
       ht:       _m(()      => engine.hideturtle(tid)),
       showturtle: _m(()    => engine.showturtle(tid)),
