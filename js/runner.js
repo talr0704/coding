@@ -378,16 +378,26 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
     }
   }
 
-  // Store engine globally so the $builtinmodule JS stub can reference it
+  // Store engine globally so the $builtinmodule JS stub can reference it.
+  // Also directly replace Sk.builtinFiles entry for turtle — Skulkt may read
+  // builtinFiles directly without going through our read() callback.
+  const _TURTLE_STUB = `var $builtinmodule = function(name) {
+    return window._tkBuildModule ? window._tkBuildModule() : {};
+  };`;
+
   if (engine) {
     window._tkEngine = engine;
     window._tkBuildModule = () => _buildTurtleModule(engine);
+    // Patch builtinFiles so Skulkt finds our stub however it looks for turtle
+    if (Sk.builtinFiles && Sk.builtinFiles.files) {
+      Sk.builtinFiles.files['src/lib/turtle.js'] = _TURTLE_STUB;
+    }
   } else {
     window._tkEngine = null;
     delete Sk.TurtleGraphics;
   }
 
-  // Clear turtle from Skulkt's module cache so it re-runs our $builtinmodule stub
+  // Clear turtle from Skulkt's module cache so the stub runs fresh each time
   if (Sk.sysmodules) {
     try { Sk.sysmodules.mp$del_subscript(new Sk.builtin.str('turtle')); } catch (_) {}
   }
@@ -395,13 +405,9 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
   Sk.configure({
     output: onOutput,
     read: (file) => {
-      // Intercept Skulkt's turtle stdlib with our JS bridge.
-      // Skulkt loads 'src/lib/turtle.js' as a $builtinmodule JS file.
-      // We return our own JS stub that delegates to the TurtleEngine.
-      if (file === 'src/lib/turtle.js' && window._tkEngine) {
-        return `var $builtinmodule = function(name) {
-          return window._tkBuildModule ? window._tkBuildModule() : {};
-        };`;
+      // Belt-and-suspenders: also intercept via read callback
+      if (window._tkEngine && (file === 'src/lib/turtle.js' || file.endsWith('/turtle.js'))) {
+        return _TURTLE_STUB;
       }
       if (extraFiles[file] !== undefined) return extraFiles[file];
       if (Sk.builtinFiles?.files?.[file]) return Sk.builtinFiles.files[file];
