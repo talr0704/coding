@@ -44,14 +44,14 @@
     <div class="modal">
       <h2 class="modal-title">Create a New Project 🎨</h2>
       <div class="form-group">
-        <label for="project-name">Project Name</label>
-        <input type="text" id="project-name" placeholder="My Awesome Project" maxlength="40" />
+        <label for="project-title-input">Project Name</label>
+        <input type="text" id="project-title-input" placeholder="My Awesome Project" maxlength="40" />
       </div>
       <div class="form-group">
         <label>Project Type</label>
         <div class="type-selector">
           <button class="type-btn active" data-type="python">🐍 Python</button>
-          <button class="type-btn" data-type="html">🌐 HTML &amp; CSS</button>
+          <button class="type-btn"        data-type="html">🌐 HTML &amp; CSS</button>
         </div>
       </div>
       <div class="modal-actions">
@@ -75,15 +75,13 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { FIREBASE_CONFIG } from "./js/config.js";
+    import { FIREBASE_CONFIG }  from "./js/config.js";
+    import { initAuth, onAuthChange, doSignOut } from "./js/auth.js";
+    import { initFirestore, createProject, listProjects, deleteProject } from "./js/projects.js";
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    const app  = initializeApp(FIREBASE_CONFIG);
+    const auth = initAuth(app);
+    const db   = initFirestore(app);
 
     const STARTER_CODE = {
       python: `# Welcome to CodeKids! 🐍
@@ -128,22 +126,22 @@ for i in range(5):
 </html>`
     };
 
-    let currentUser = null;
-    let selectedType = "python";
-    let deleteTargetId = null;
+    let currentUser   = null;
+    let selectedType  = "python";
+    let deleteTarget  = null;   // { id, title }
 
-    // Auth guard
-    onAuthStateChanged(auth, async user => {
+    // ── Auth guard ───────────────────────────────────────────
+    onAuthChange(async user => {
       if (!user) { window.location.href = "index.html"; return; }
       currentUser = user;
-      document.getElementById("user-name").textContent = user.displayName || "Coder";
+      document.getElementById("user-name").textContent = user.displayName || user.email || "Coder";
       if (user.photoURL) document.getElementById("user-avatar").src = user.photoURL;
       await loadProjects();
     });
 
-    document.getElementById("sign-out-btn").addEventListener("click", () => signOut(auth));
+    document.getElementById("sign-out-btn").addEventListener("click", () => doSignOut());
 
-    // Project type selector
+    // ── Project type selector ────────────────────────────────
     document.querySelectorAll(".type-btn").forEach(btn => {
       btn.addEventListener("click", () => {
         document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("active"));
@@ -152,29 +150,30 @@ for i in range(5):
       });
     });
 
-    // New project modal
+    // ── New project modal ────────────────────────────────────
     document.getElementById("new-project-btn").addEventListener("click", () => {
-      document.getElementById("project-name").value = "";
+      document.getElementById("project-title-input").value = "";
+      selectedType = "python";
+      document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("active"));
+      document.querySelector('.type-btn[data-type="python"]').classList.add("active");
       document.getElementById("new-project-modal").style.display = "flex";
-      setTimeout(() => document.getElementById("project-name").focus(), 100);
+      setTimeout(() => document.getElementById("project-title-input").focus(), 100);
     });
+
     document.getElementById("cancel-modal").addEventListener("click", () => {
       document.getElementById("new-project-modal").style.display = "none";
     });
 
     document.getElementById("create-project-btn").addEventListener("click", async () => {
-      const name = document.getElementById("project-name").value.trim() || "Untitled Project";
+      const title = document.getElementById("project-title-input").value.trim() || "Untitled Project";
       const btn = document.getElementById("create-project-btn");
-      btn.disabled = true;
-      btn.textContent = "Creating...";
+      btn.disabled = true; btn.textContent = "Creating...";
 
       try {
-        const ref = await addDoc(collection(db, "users", currentUser.uid, "projects"), {
-          name,
+        const ref = await createProject(currentUser.uid, {
+          title,
           type: selectedType,
-          code: STARTER_CODE[selectedType],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          code: STARTER_CODE[selectedType]
         });
         document.getElementById("new-project-modal").style.display = "none";
         window.location.href = `editor.html?id=${ref.id}&type=${selectedType}`;
@@ -186,27 +185,29 @@ for i in range(5):
       }
     });
 
-    // Delete modal
+    // ── Delete modal ─────────────────────────────────────────
     document.getElementById("cancel-delete").addEventListener("click", () => {
       document.getElementById("delete-modal").style.display = "none";
     });
+
     document.getElementById("confirm-delete").addEventListener("click", async () => {
-      if (!deleteTargetId) return;
-      await deleteDoc(doc(db, "users", currentUser.uid, "projects", deleteTargetId));
+      if (!deleteTarget) return;
+      try {
+        await deleteProject(currentUser.uid, deleteTarget.id);
+      } catch (e) {
+        console.error(e);
+      }
       document.getElementById("delete-modal").style.display = "none";
       await loadProjects();
     });
 
+    // ── Load & render projects ───────────────────────────────
     async function loadProjects() {
       const grid = document.getElementById("projects-grid");
       grid.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Loading...</p></div>';
 
       try {
-        const q = query(collection(db, "users", currentUser.uid, "projects"), orderBy("updatedAt", "desc"));
-        const snap = await getDocs(q);
-        const projects = [];
-        snap.forEach(d => projects.push({ id: d.id, ...d.data() }));
-
+        const projects = await listProjects(currentUser.uid);
         const count = document.getElementById("project-count");
         count.textContent = projects.length === 0
           ? "No projects yet — create your first one!"
@@ -223,40 +224,51 @@ for i in range(5):
         }
 
         grid.innerHTML = projects.map(p => {
-          const icon = p.type === "html" ? "🌐" : "🐍";
+          const icon  = p.type === "html" ? "🌐" : "🐍";
           const color = p.type === "html" ? "card-html" : "card-python";
-          const date = p.updatedAt?.toDate
+          const date  = p.updatedAt?.toDate
             ? p.updatedAt.toDate().toLocaleDateString()
             : "Just now";
+          // Use title field (fall back to name for legacy documents)
+          const title = esc(p.title ?? p.name ?? "Untitled");
+
+          // Show thumbnail from first image if available
+          const thumb = (p.images && p.images.length > 0)
+            ? `<img src="${esc(p.images[0].url)}" alt="thumbnail" class="project-thumb" loading="lazy" />`
+            : `<div class="project-card-icon">${icon}</div>`;
+
           return `
             <div class="project-card ${color}">
-              <div class="project-card-icon">${icon}</div>
+              ${thumb}
               <div class="project-card-body">
-                <h3 class="project-name">${escHtml(p.name)}</h3>
-                <p class="project-meta">${p.type === "html" ? "HTML & CSS" : "Python"} · ${date}</p>
+                <h3 class="project-name">${title}</h3>
+                <p class="project-meta">${p.type === "html" ? "HTML & CSS" : "Python"} · ${date}${p.images?.length ? ` · ${p.images.length} 🖼️` : ""}</p>
               </div>
               <div class="project-card-actions">
-                <a href="editor.html?id=${p.id}&type=${p.type}" class="btn-open">Open ✏️</a>
-                <button class="btn-del" data-id="${p.id}" data-name="${escHtml(p.name)}">🗑️</button>
+                <a href="editor.html?id=${p.id}&type=${esc(p.type)}" class="btn-open">Open ✏️</a>
+                <button class="btn-del" data-id="${p.id}" data-title="${title}" title="Delete project">🗑️</button>
               </div>
             </div>`;
         }).join("");
 
-        document.querySelectorAll(".btn-del").forEach(btn => {
+        grid.querySelectorAll(".btn-del").forEach(btn => {
           btn.addEventListener("click", () => {
-            deleteTargetId = btn.dataset.id;
-            document.getElementById("delete-project-name").textContent = btn.dataset.name;
+            deleteTarget = { id: btn.dataset.id, title: btn.dataset.title };
+            document.getElementById("delete-project-name").textContent = btn.dataset.title;
             document.getElementById("delete-modal").style.display = "flex";
           });
         });
+
       } catch (e) {
         console.error(e);
         grid.innerHTML = '<p class="error-msg">Could not load projects. Check your Firebase config.</p>';
       }
     }
 
-    function escHtml(s) {
-      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
   </script>
 </body>

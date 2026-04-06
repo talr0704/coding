@@ -29,20 +29,48 @@
       <span class="pill pill-save">💾 Save Projects</span>
     </div>
 
+    <!-- ── Auth card ─────────────────────────────── -->
     <div class="auth-card" id="auth-card">
+
+      <!-- Signed-out view -->
       <div id="signed-out-view">
-        <p class="auth-subtitle">Sign in with your Google account to get started!</p>
-        <button class="btn-google" id="sign-in-btn">
-          <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z" fill="#FFC107"/>
-            <path d="M6.3 14.7l7.1 5.2C15.1 16.2 19.2 14 24 14c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.6 7.3 6.3 14.7z" fill="#FF3D00"/>
-            <path d="M24 46c5.5 0 10.5-1.8 14.4-4.9l-6.7-5.5C29.6 37.4 26.9 38 24 38c-6.1 0-11.2-3.8-13.1-9.2l-7.1 5.5C7.4 42 15.1 46 24 46z" fill="#4CAF50"/>
-            <path d="M44.5 20H24v8.5h11.8c-.9 3-3.3 5.5-6.4 7l6.7 5.5C40.6 37 45 31 45 24c0-1.3-.2-2.7-.5-4z" fill="#1976D2"/>
-          </svg>
-          Sign in with Google
-        </button>
+        <!-- Tab switcher -->
+        <div class="auth-tabs" role="tablist">
+          <button class="auth-tab active" data-tab="google" role="tab" aria-selected="true">🌐 Google</button>
+          <button class="auth-tab"        data-tab="email"  role="tab" aria-selected="false">✉️ Email &amp; Password</button>
+        </div>
+
+        <!-- Google tab -->
+        <div id="tab-google">
+          <p class="auth-subtitle">Sign in quickly with your Google account.</p>
+          <button class="btn-google" id="sign-in-google">
+            <svg width="20" height="20" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <path d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z" fill="#FFC107"/>
+              <path d="M6.3 14.7l7.1 5.2C15.1 16.2 19.2 14 24 14c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.6 7.3 6.3 14.7z" fill="#FF3D00"/>
+              <path d="M24 46c5.5 0 10.5-1.8 14.4-4.9l-6.7-5.5C29.6 37.4 26.9 38 24 38c-6.1 0-11.2-3.8-13.1-9.2l-7.1 5.5C7.4 42 15.1 46 24 46z" fill="#4CAF50"/>
+              <path d="M44.5 20H24v8.5h11.8c-.9 3-3.3 5.5-6.4 7l6.7 5.5C40.6 37 45 31 45 24c0-1.3-.2-2.7-.5-4z" fill="#1976D2"/>
+            </svg>
+            Sign in with Google
+          </button>
+          <div id="google-error" class="auth-error"></div>
+        </div>
+
+        <!-- Email / Password tab -->
+        <div id="tab-email" style="display:none;">
+          <p class="auth-subtitle" id="email-subtitle">Sign in with your email and password.</p>
+          <div class="email-form">
+            <input type="email"    id="email-input"    class="email-input" placeholder="Email address"  autocomplete="email"    required />
+            <input type="password" id="password-input" class="email-input" placeholder="Password (min 6 chars)" autocomplete="current-password" required />
+            <div id="email-error" class="auth-error"></div>
+            <div class="email-actions">
+              <button class="btn-email-primary"   id="btn-sign-in">Sign In</button>
+              <button class="btn-email-secondary" id="btn-sign-up">Sign Up</button>
+            </div>
+          </div>
+        </div>
       </div>
 
+      <!-- Signed-in view -->
       <div id="signed-in-view" style="display:none;">
         <div class="user-welcome">
           <img id="user-avatar" src="" alt="avatar" class="user-avatar" />
@@ -56,23 +84,34 @@
       </div>
     </div>
 
+    <!-- Account-linking modal (shown when Google auth detects existing email/password account) -->
+    <div id="link-modal" class="modal-backdrop" style="display:none;" role="dialog" aria-modal="true">
+      <div class="modal modal-sm">
+        <h2 class="modal-title">🔗 Link Accounts</h2>
+        <p class="link-modal-body">
+          The email <strong id="link-email"></strong> is already registered with a password.<br><br>
+          Enter your password below to link your Google account to it.
+        </p>
+        <div class="form-group">
+          <label for="link-password">Password</label>
+          <input type="password" id="link-password" placeholder="Your existing password" />
+        </div>
+        <div id="link-error" class="auth-error" style="margin-bottom:1rem;"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="link-cancel">Cancel</button>
+          <button class="btn-create" id="link-confirm">Link &amp; Sign In</button>
+        </div>
+      </div>
+    </div>
+
     <div class="how-it-works">
       <h2>How it works</h2>
       <div class="steps">
-        <div class="step">
-          <div class="step-icon">1️⃣</div>
-          <p>Sign in with Google</p>
-        </div>
+        <div class="step"><div class="step-icon">1️⃣</div><p>Sign in</p></div>
         <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-icon">2️⃣</div>
-          <p>Create a project</p>
-        </div>
+        <div class="step"><div class="step-icon">2️⃣</div><p>Create a project</p></div>
         <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-icon">3️⃣</div>
-          <p>Write &amp; run code!</p>
-        </div>
+        <div class="step"><div class="step-icon">3️⃣</div><p>Write &amp; run code!</p></div>
       </div>
     </div>
   </main>
@@ -81,36 +120,127 @@
     <p>Made with ❤️ for young coders</p>
   </footer>
 
-  <!-- Firebase -->
+  <!-- Firebase + Auth module -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { FIREBASE_CONFIG } from "./js/config.js";
+    import {
+      initAuth, onAuthChange,
+      signInWithGoogle, signUpEmail, signInEmail,
+      linkGoogleToEmailAccount, doSignOut,
+      getAuthErrorMsg
+    } from "./js/auth.js";
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
+    const app  = initializeApp(FIREBASE_CONFIG);
+    const auth = initAuth(app);
 
-    document.getElementById("sign-in-btn").addEventListener("click", () => {
-      signInWithPopup(auth, provider).catch(console.error);
+    // ── Tab switching ────────────────────────────────────────
+    const tabs = document.querySelectorAll(".auth-tab");
+    tabs.forEach(tab => tab.addEventListener("click", () => {
+      tabs.forEach(t => { t.classList.remove("active"); t.setAttribute("aria-selected", "false"); });
+      tab.classList.add("active");
+      tab.setAttribute("aria-selected", "true");
+      document.getElementById("tab-google").style.display = tab.dataset.tab === "google" ? "" : "none";
+      document.getElementById("tab-email").style.display  = tab.dataset.tab === "email"  ? "" : "none";
+      clearErrors();
+    }));
+
+    function clearErrors() {
+      document.getElementById("google-error").textContent = "";
+      document.getElementById("email-error").textContent  = "";
+    }
+
+    function showError(elId, msg) {
+      const el = document.getElementById(elId);
+      el.textContent = msg;
+    }
+
+    // ── Google Sign-In ───────────────────────────────────────
+    let _pendingCred = null;
+    let _pendingEmail = null;
+
+    document.getElementById("sign-in-google").addEventListener("click", async () => {
+      clearErrors();
+      const { user, error, needsLinking, pendingCred, email } = await signInWithGoogle();
+      if (user) return; // onAuthChange handles redirect
+      if (needsLinking) {
+        _pendingCred  = pendingCred;
+        _pendingEmail = email;
+        document.getElementById("link-email").textContent = email;
+        document.getElementById("link-password").value = "";
+        document.getElementById("link-error").textContent = "";
+        document.getElementById("link-modal").style.display = "flex";
+        return;
+      }
+      if (error && error.code !== "auth/cancelled-popup-request" && error.code !== "auth/popup-closed-by-user") {
+        showError("google-error", getAuthErrorMsg(error));
+      }
     });
 
-    document.getElementById("sign-out-btn").addEventListener("click", () => {
-      signOut(auth);
+    // ── Account Linking Modal ────────────────────────────────
+    document.getElementById("link-cancel").addEventListener("click", () => {
+      document.getElementById("link-modal").style.display = "none";
+      _pendingCred = null; _pendingEmail = null;
     });
 
-    onAuthStateChanged(auth, user => {
+    document.getElementById("link-confirm").addEventListener("click", async () => {
+      const password = document.getElementById("link-password").value;
+      if (!password) { showError("link-error", "Please enter your password."); return; }
+      const btn = document.getElementById("link-confirm");
+      btn.disabled = true; btn.textContent = "Linking...";
+
+      const { user, error } = await linkGoogleToEmailAccount(_pendingEmail, _pendingCred, password);
+      btn.disabled = false; btn.textContent = "Link & Sign In";
+
+      if (user) {
+        document.getElementById("link-modal").style.display = "none";
+      } else {
+        showError("link-error", getAuthErrorMsg(error));
+      }
+    });
+
+    // ── Email / Password ─────────────────────────────────────
+    document.getElementById("btn-sign-in").addEventListener("click", async () => {
+      clearErrors();
+      const email    = document.getElementById("email-input").value.trim();
+      const password = document.getElementById("password-input").value;
+      if (!email || !password) { showError("email-error", "Please enter your email and password."); return; }
+
+      const { user, error, needsProviderSwitch, providers } = await signInEmail(email, password);
+      if (user) return;
+      let msg = getAuthErrorMsg(error);
+      if (needsProviderSwitch && providers?.includes("google.com")) {
+        msg = "This email is registered via Google. Please use the Google Sign-In button.";
+      }
+      showError("email-error", msg);
+    });
+
+    document.getElementById("btn-sign-up").addEventListener("click", async () => {
+      clearErrors();
+      const email    = document.getElementById("email-input").value.trim();
+      const password = document.getElementById("password-input").value;
+      if (!email || !password) { showError("email-error", "Please enter your email and password."); return; }
+
+      const { user, error } = await signUpEmail(email, password);
+      if (user) return;
+      showError("email-error", getAuthErrorMsg(error));
+    });
+
+    // ── Sign Out ─────────────────────────────────────────────
+    document.getElementById("sign-out-btn").addEventListener("click", () => doSignOut());
+
+    // ── Auth state ───────────────────────────────────────────
+    onAuthChange(user => {
       if (user) {
         document.getElementById("signed-out-view").style.display = "none";
-        document.getElementById("signed-in-view").style.display = "flex";
-        document.getElementById("user-display-name").textContent = user.displayName || "Coder";
+        document.getElementById("signed-in-view").style.display  = "flex";
+        document.getElementById("user-display-name").textContent = user.displayName || user.email || "Coder";
         const av = document.getElementById("user-avatar");
-        if (user.photoURL) av.src = user.photoURL;
+        if (user.photoURL) { av.src = user.photoURL; av.style.display = ""; }
         else av.style.display = "none";
       } else {
-        document.getElementById("signed-out-view").style.display = "block";
-        document.getElementById("signed-in-view").style.display = "none";
+        document.getElementById("signed-out-view").style.display = "";
+        document.getElementById("signed-in-view").style.display  = "none";
       }
     });
   </script>
