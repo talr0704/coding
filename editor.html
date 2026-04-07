@@ -425,18 +425,18 @@
 
     document.getElementById("clear-turtle-btn")
       ?.addEventListener("click", () => {
-        const eng = turtleCanvas._tkEngine;
+        const eng = window._tkEngine;
         if (eng) { eng.clearAll(); } else { turtleCanvas.innerHTML = ""; }
       });
 
     turtleShapeSelect?.addEventListener("change", () => {
-      const eng = turtleCanvas._tkEngine;
+      const eng = window._tkEngine;
       if (eng) eng.setShapeFromUI(turtleShapeSelect.value);
     });
 
     document.getElementById("reset-turtle-btn")
       ?.addEventListener("click", () => {
-        const eng = turtleCanvas._tkEngine;
+        const eng = window._tkEngine;
         if (eng) { eng.resetAll(); } else { turtleCanvas.innerHTML = ""; }
       });
 

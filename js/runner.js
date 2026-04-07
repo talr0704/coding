@@ -365,49 +365,43 @@ function _buildTurtleModule(engine) {
  * @param {object|null} opts.projectImages  { cleanName: url } for shape pre-registration
  */
 export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, turtleTarget = null, projectImages = null }) {
-  // Build TurtleEngine and inject turtle module before Skulkt runs
-  let engine = null;
-  if (turtleTarget && window.TurtleEngine) {
-    const container = document.getElementById(turtleTarget);
-    if (container) {
-      engine = new window.TurtleEngine(container);
-      _engine = engine;
-      if (projectImages) {
-        Object.entries(projectImages).forEach(([name, url]) => engine.addshape(name, url));
-      }
+
+  // The turtle module stub creates TurtleEngine LAZILY when Python's `import turtle`
+  // runs — not before. This prevents the conflict where Skulkt's init code deletes
+  // our pre-created canvases. The stub is injected via Sk.builtinFiles AND our
+  // read() callback (belt-and-suspenders, since we're not sure which path Skulkt uses).
+  const turtleStub = turtleTarget ? `var $builtinmodule = function() {
+    var c = document.getElementById(${JSON.stringify(turtleTarget)});
+    if (!c || !window.TurtleEngine) return {};
+    c.innerHTML = '';
+    var eng = new window.TurtleEngine(c);
+    if (window._tkProjectImages) {
+      Object.entries(window._tkProjectImages).forEach(function(e) { eng.addshape(e[0], e[1]); });
     }
-  }
+    window._tkEngine = eng;
+    return window._tkBuildModuleFactory(eng);
+  };` : null;
 
-  // Store engine globally so the $builtinmodule JS stub can reference it.
-  // Also directly replace Sk.builtinFiles entry for turtle — Skulkt may read
-  // builtinFiles directly without going through our read() callback.
-  const _TURTLE_STUB = `var $builtinmodule = function(name) {
-    return window._tkBuildModule ? window._tkBuildModule() : {};
-  };`;
+  // Store project images globally so the stub can access them
+  window._tkProjectImages = projectImages || {};
+  window._tkBuildModuleFactory = _buildTurtleModule;
+  window._tkEngine = null;
 
-  if (engine) {
-    window._tkEngine = engine;
-    window._tkBuildModule = () => _buildTurtleModule(engine);
-    // Patch builtinFiles so Skulkt finds our stub however it looks for turtle
+  if (turtleStub) {
+    // Patch Sk.builtinFiles so Skulkt finds our stub when it reads src/lib/turtle.js
     if (Sk.builtinFiles && Sk.builtinFiles.files) {
-      Sk.builtinFiles.files['src/lib/turtle.js'] = _TURTLE_STUB;
+      Sk.builtinFiles.files['src/lib/turtle.js'] = turtleStub;
     }
   } else {
-    window._tkEngine = null;
     delete Sk.TurtleGraphics;
-  }
-
-  // Clear turtle from Skulkt's module cache so the stub runs fresh each time
-  if (Sk.sysmodules) {
-    try { Sk.sysmodules.mp$del_subscript(new Sk.builtin.str('turtle')); } catch (_) {}
   }
 
   Sk.configure({
     output: onOutput,
     read: (file) => {
-      // Belt-and-suspenders: also intercept via read callback
-      if (window._tkEngine && (file === 'src/lib/turtle.js' || file.endsWith('/turtle.js'))) {
-        return _TURTLE_STUB;
+      // Intercept turtle module loading — belt-and-suspenders alongside builtinFiles patch
+      if (turtleStub && (file === 'src/lib/turtle.js' || file.endsWith('/turtle.js'))) {
+        return turtleStub;
       }
       if (extraFiles[file] !== undefined) return extraFiles[file];
       if (Sk.builtinFiles?.files?.[file]) return Sk.builtinFiles.files[file];
@@ -426,7 +420,7 @@ export async function runPython({ mainCode, extraFiles = {}, onOutput, onInput, 
   } catch (err) {
     return { success: false, error: err };
   } finally {
-    window._tkEngine = null;
-    window._tkBuildModule = null;
+    window._tkProjectImages = null;
+    window._tkBuildModuleFactory = null;
   }
 }
