@@ -206,7 +206,8 @@ class TurtleEngine {
     this._shapeReg[name] = url;
     if (this._imgCache[name]) { this._redrawSprites(); return; } // already loaded
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // No crossOrigin — Firebase Storage doesn't return CORS headers for GitHub Pages.
+    // The canvas becomes tainted (no pixel read-back), but drawing still works fine.
     img.onload  = () => { this._imgCache[name] = img; this._redrawSprites(); };
     img.onerror = () => console.warn('[Turtle] Could not load shape image:', url);
     img.src = url;
