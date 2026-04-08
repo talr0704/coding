@@ -727,6 +727,15 @@ body {
 }
 .upload-progress-pct { color: #8b8bab; font-size: 0.7rem; margin-top: 4px; }
 
+.upload-error-msg {
+  width: 100%; padding: 0.45rem 0.75rem;
+  background: rgba(239,68,68,0.12); border: 1px solid #ef4444;
+  border-radius: 8px; color: #fca5a5;
+  font-family: 'Nunito', sans-serif; font-size: 0.82rem;
+  direction: rtl; text-align: right;
+  animation: fadeIn 0.2s ease;
+}
+
 /* ── RESPONSIVE ──────────────────────────────────── */
 
 @media (max-width: 600px) {
