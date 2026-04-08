@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://talr0704.github.io"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]

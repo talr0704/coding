@@ -496,6 +496,20 @@
     // ── Image upload ─────────────────────────────────────────
     const imageFileInput = document.getElementById("image-file-input");
 
+    /** Show a brief Hebrew error message inside the images panel. */
+    function _showUploadError(msg) {
+      if (!panelOpen) {
+        panelOpen = true;
+        imagesPanel.classList.remove("collapsed");
+        toggleIcon.textContent = "▼ hide";
+      }
+      const el = document.createElement("div");
+      el.className = "upload-error-msg";
+      el.textContent = msg;
+      imagesScroll.appendChild(el);
+      setTimeout(() => el.remove(), 5000);
+    }
+
     document.getElementById("upload-img-btn").addEventListener("click", () => {
       imageFileInput.value = "";
       imageFileInput.click();
@@ -505,9 +519,15 @@
       const file = imageFileInput.files[0];
       if (!file) return;
 
-      // Validate type and size (max 5 MB)
-      if (!file.type.startsWith("image/")) { alert("Please select an image file."); return; }
-      if (file.size > 5 * 1024 * 1024) { alert("Image must be smaller than 5 MB."); return; }
+      // Validate type and size (max 1 MB)
+      if (!file.type.startsWith("image/")) {
+        _showUploadError("הקובץ שנבחר אינו תמונה. נא לבחור קובץ מסוג JPG, PNG, GIF וכדומה.");
+        return;
+      }
+      if (file.size > 1 * 1024 * 1024) {
+        _showUploadError("התמונה גדולה מדי — הגודל המקסימלי הוא 1 MB.");
+        return;
+      }
 
       // Show progress placeholder
       const progressEl = document.createElement("div");
@@ -534,7 +554,7 @@
         projectImages.push({ ...meta, uploadedAt: new Date().toISOString() });
       } catch (e) {
         console.error(e);
-        alert("Upload failed: " + e.message);
+        _showUploadError("ההעלאה נכשלה. נסה שנית.");
       } finally {
         progressEl.remove();
         renderImages();
