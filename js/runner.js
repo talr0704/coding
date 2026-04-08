@@ -169,6 +169,10 @@ function _buildTurtleModule(engine) {
 
   // ── canvas / screen ───────────────────────────────────────────────────────
   mod.bgcolor   = _fn((_c) => { engine.bgcolor(_js(_c)); });
+  mod.bgpic     = _fn((_url) => {
+    if (_url === undefined) return new Sk.builtin.str('nopic');
+    engine.bgpic(_js(_url));
+  });
   mod.clear     = mod.clearscreen = _fn(() => { engine.clearAll(); });
   mod.reset     = mod.resetscreen = _fn(() => { engine.resetAll(); });
   mod.Screen    = _fn(() => {
@@ -176,6 +180,10 @@ function _buildTurtleModule(engine) {
     screen.tp$getattr = (name) => {
       const methods = {
         bgcolor:   _fn((_c) => { engine.bgcolor(_js(_c)); }),
+        bgpic:     _fn((_url) => {
+          if (_url === undefined) return new Sk.builtin.str('nopic');
+          engine.bgpic(_js(_url));
+        }),
         setup:     _fn(() => {}),
         title:     _fn(() => {}),
         exitonclick: _fn(() => {}),

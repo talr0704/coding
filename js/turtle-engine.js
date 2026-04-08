@@ -100,7 +100,7 @@ class TurtleEngine {
     Object.assign(this._wrap.style, {
       position: 'relative', display: 'inline-block',
       width: _TK_W + 'px', height: _TK_H + 'px',
-      background: this.bgColor
+      backgroundColor: this.bgColor
     });
 
     this._lineC  = this._mkCanvas('tk-lines');
@@ -282,7 +282,25 @@ class TurtleEngine {
 
   bgcolor(color) {
     this.bgColor = color;
-    this._wrap.style.background = color;
+    this._wrap.style.backgroundColor = color;
+  }
+
+  bgpic(nameOrUrl) {
+    if (!nameOrUrl || nameOrUrl === 'nopic') {
+      this._wrap.style.backgroundImage = 'none';
+      return;
+    }
+    // Resolve: registered shape name → URL, or use directly if it looks like a URL
+    let url = nameOrUrl;
+    if (this._shapeReg[nameOrUrl] && this._shapeReg[nameOrUrl] !== 'builtin') {
+      url = this._shapeReg[nameOrUrl];
+    }
+    if (/^https?:\/\//.test(url) || url.startsWith('data:') || url.startsWith('blob:')) {
+      this._wrap.style.backgroundImage = `url(${JSON.stringify(url)})`;
+      this._wrap.style.backgroundSize = 'contain';
+      this._wrap.style.backgroundRepeat = 'no-repeat';
+      this._wrap.style.backgroundPosition = 'center';
+    }
   }
 
   // ── Clear / Reset ─────────────────────────────────────────────────────────
