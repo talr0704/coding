@@ -257,6 +257,15 @@ class TurtleEngine {
 
   // ── Stamp / Write ─────────────────────────────────────────────────────────
 
+  dot(id, size, color) {
+    const t = this._turtles[id];
+    const ctx = this._lCtx;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, Math.max((size || 1) / 2, 0.5), 0, Math.PI * 2);
+    ctx.fillStyle = color || t.penColor;
+    ctx.fill();
+  }
+
   stamp(id) { this._paintSprite(this._lCtx, this._turtles[id]); }
 
   write(id, text, align) {
@@ -343,6 +352,7 @@ class TurtleEngine {
     t.heading = 0; t.penDown = true;
     t.penColor = '#000000'; t.fillColor = '#000000';
     t.penWidth = 1; t.visible = true; t.fillPath = null;
+    t.shape = 'classic';
   }
 
   _moveTo(id, nx, ny) {
