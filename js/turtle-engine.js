@@ -100,7 +100,7 @@ class TurtleEngine {
     Object.assign(this._wrap.style, {
       position: 'relative', display: 'inline-block',
       width: _TK_W + 'px', height: _TK_H + 'px',
-      background: this.bgColor
+      backgroundColor: this.bgColor
     });
 
     this._lineC  = this._mkCanvas('tk-lines');
@@ -257,6 +257,15 @@ class TurtleEngine {
 
   // ── Stamp / Write ─────────────────────────────────────────────────────────
 
+  dot(id, size, color) {
+    const t = this._turtles[id];
+    const ctx = this._lCtx;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, Math.max((size || 1) / 2, 0.5), 0, Math.PI * 2);
+    ctx.fillStyle = color || t.penColor;
+    ctx.fill();
+  }
+
   stamp(id) { this._paintSprite(this._lCtx, this._turtles[id]); }
 
   write(id, text, align) {
@@ -282,7 +291,25 @@ class TurtleEngine {
 
   bgcolor(color) {
     this.bgColor = color;
-    this._wrap.style.background = color;
+    this._wrap.style.backgroundColor = color;
+  }
+
+  bgpic(nameOrUrl) {
+    if (!nameOrUrl || nameOrUrl === 'nopic') {
+      this._wrap.style.backgroundImage = 'none';
+      return;
+    }
+    // Resolve: registered shape name → URL, or use directly if it looks like a URL
+    let url = nameOrUrl;
+    if (this._shapeReg[nameOrUrl] && this._shapeReg[nameOrUrl] !== 'builtin') {
+      url = this._shapeReg[nameOrUrl];
+    }
+    if (/^https?:\/\//.test(url) || url.startsWith('data:') || url.startsWith('blob:')) {
+      this._wrap.style.backgroundImage = `url(${JSON.stringify(url)})`;
+      this._wrap.style.backgroundSize = 'contain';
+      this._wrap.style.backgroundRepeat = 'no-repeat';
+      this._wrap.style.backgroundPosition = 'center';
+    }
   }
 
   // ── Clear / Reset ─────────────────────────────────────────────────────────
@@ -325,6 +352,7 @@ class TurtleEngine {
     t.heading = 0; t.penDown = true;
     t.penColor = '#000000'; t.fillColor = '#000000';
     t.penWidth = 1; t.visible = true; t.fillPath = null;
+    t.shape = 'classic';
   }
 
   _moveTo(id, nx, ny) {
