@@ -86,6 +86,10 @@ class TurtleEngine {
     this._nextId  = 0;
     this.bgColor  = '#ffffff';
 
+    // Background image state (drawn on _bgC canvas)
+    this._bgpicImg = null;
+    this._bgpicUrl = null;
+
     this._buildDOM();
     this.defaultId = this.newTurtle();
 
@@ -103,20 +107,32 @@ class TurtleEngine {
       backgroundColor: this.bgColor
     });
 
-    this._lineC  = this._mkCanvas('tk-lines');
-    this._sprC   = this._mkCanvas('tk-sprite');
-    Object.assign(this._sprC.style, {
-      position: 'absolute', top: '0', left: '0', pointerEvents: 'none'
-    });
+    // Three canvas layers with explicit z-index:
+    //   _bgC  (z=0) — bgpic background image
+    //   _lineC (z=1) — persistent pen drawings
+    //   _sprC  (z=2) — turtle sprite (redrawn on every move)
+    this._bgC   = this._mkCanvas('tk-bg');
+    this._lineC = this._mkCanvas('tk-lines');
+    this._sprC  = this._mkCanvas('tk-sprite');
 
+    const absLayer = (c, z) => Object.assign(c.style, {
+      position: 'absolute', top: '0', left: '0',
+      pointerEvents: 'none', zIndex: String(z)
+    });
+    absLayer(this._bgC,   0);
+    absLayer(this._lineC, 1);
+    absLayer(this._sprC,  2);
+
+    this._wrap.appendChild(this._bgC);
     this._wrap.appendChild(this._lineC);
     this._wrap.appendChild(this._sprC);
 
     this._container.innerHTML = '';
     this._container.appendChild(this._wrap);
 
-    this._lCtx = this._lineC.getContext('2d');
-    this._sCtx = this._sprC.getContext('2d');
+    this._bgCtx = this._bgC.getContext('2d');
+    this._lCtx  = this._lineC.getContext('2d');
+    this._sCtx  = this._sprC.getContext('2d');
   }
 
   _mkCanvas(id) {
@@ -295,21 +311,42 @@ class TurtleEngine {
   }
 
   bgpic(nameOrUrl) {
-    if (!nameOrUrl || nameOrUrl === 'nopic') {
-      this._wrap.style.backgroundImage = 'none';
-      return;
-    }
-    // Resolve: registered shape name → URL, or use directly if it looks like a URL
+    // Always clear the bg canvas first
+    this._bgCtx.clearRect(0, 0, _TK_W, _TK_H);
+    this._bgpicImg = null;
+    this._bgpicUrl = null;
+
+    if (!nameOrUrl || nameOrUrl === 'nopic') return;
+
+    // Resolve registered name → URL
     let url = nameOrUrl;
     if (this._shapeReg[nameOrUrl] && this._shapeReg[nameOrUrl] !== 'builtin') {
       url = this._shapeReg[nameOrUrl];
     }
-    if (/^https?:\/\//.test(url) || url.startsWith('data:') || url.startsWith('blob:')) {
-      this._wrap.style.backgroundImage = `url(${JSON.stringify(url)})`;
-      this._wrap.style.backgroundSize = 'contain';
-      this._wrap.style.backgroundRepeat = 'no-repeat';
-      this._wrap.style.backgroundPosition = 'center';
-    }
+
+    if (!/^https?:\/\//.test(url) && !url.startsWith('data:') && !url.startsWith('blob:')) return;
+
+    this._bgpicUrl = url;
+    const img = new Image();
+    // No crossOrigin: bgpic is display-only, avoids CORS issues with CSS tokens
+    img.onload = () => {
+      this._bgpicImg = img;
+      this._drawBgpic();
+    };
+    img.onerror = () => console.warn('[Turtle] bgpic: could not load image:', url);
+    img.src = url;
+  }
+
+  _drawBgpic() {
+    if (!this._bgpicImg) return;
+    const ctx = this._bgCtx;
+    ctx.clearRect(0, 0, _TK_W, _TK_H);
+    const iw = this._bgpicImg.naturalWidth  || _TK_W;
+    const ih = this._bgpicImg.naturalHeight || _TK_H;
+    // Scale to contain (fit within canvas, maintain aspect ratio)
+    const scale = Math.min(_TK_W / iw, _TK_H / ih);
+    const sw = iw * scale, sh = ih * scale;
+    ctx.drawImage(this._bgpicImg, (_TK_W - sw) / 2, (_TK_H - sh) / 2, sw, sh);
   }
 
   // ── Clear / Reset ─────────────────────────────────────────────────────────
