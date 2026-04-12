@@ -328,7 +328,10 @@ class TurtleEngine {
 
     this._bgpicUrl = url;
     const img = new Image();
-    // No crossOrigin: bgpic is display-only, avoids CORS issues with CSS tokens
+    // Must match addshape's crossOrigin='anonymous' so the browser cache stays consistent.
+    // If this URL was already fetched with CORS (by addshape), a non-CORS fetch of the
+    // same URL will trigger onerror due to cache key mismatch in some browsers.
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       this._bgpicImg = img;
       this._drawBgpic();
