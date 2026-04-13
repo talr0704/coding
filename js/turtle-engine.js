@@ -340,8 +340,8 @@ class TurtleEngine {
     ctx.clearRect(0, 0, _TK_W, _TK_H);
     const iw = this._bgpicImg.naturalWidth  || _TK_W;
     const ih = this._bgpicImg.naturalHeight || _TK_H;
-    // Scale to contain (fit within canvas, maintain aspect ratio)
-    const scale = Math.min(_TK_W / iw, _TK_H / ih);
+    // Scale to cover: fill the entire canvas, maintain aspect ratio, crop excess
+    const scale = Math.max(_TK_W / iw, _TK_H / ih);
     const sw = iw * scale, sh = ih * scale;
     ctx.drawImage(this._bgpicImg, (_TK_W - sw) / 2, (_TK_H - sh) / 2, sw, sh);
   }
