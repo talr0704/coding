@@ -222,17 +222,13 @@ class TurtleEngine {
     this._shapeReg[name] = url;
     if (this._imgCache[name]) { this._redrawSprites(); return; } // already loaded
     const img = new Image();
-    // crossOrigin='anonymous' is required so canvas.drawImage() doesn't taint the
-    // canvas (which would block stamp/toDataURL).  For this to work the Firebase
-    // Storage bucket must have CORS configured to allow the app's origin.
-    // See FIREBASE_STORAGE_CORS_SETUP.md for the exact setup steps.
-    img.crossOrigin = 'anonymous';
+    // Do NOT set crossOrigin: the project-images panel loads the same URLs without it,
+    // so the browser cache already has responses without CORS headers. Setting
+    // crossOrigin='anonymous' here would cause a cache key mismatch and trigger onerror.
+    // We never call toDataURL/getImageData so a tainted canvas is acceptable.
     img.onload = () => { this._imgCache[name] = img; this._redrawSprites(); };
     img.onerror = () => {
-      // Image failed to load (likely a CORS or network error).
-      // Fall back to the built-in 'classic' shape so the turtle stays visible.
-      console.warn('[Turtle] Could not load shape image:', url,
-        '— falling back to classic. Check FIREBASE_STORAGE_CORS_SETUP.md.');
+      console.warn('[Turtle] Could not load shape image:', url, '— falling back to classic.');
       this._shapeReg[name] = 'builtin';
       this._redrawSprites();
     };
@@ -328,10 +324,8 @@ class TurtleEngine {
 
     this._bgpicUrl = url;
     const img = new Image();
-    // Must match addshape's crossOrigin='anonymous' so the browser cache stays consistent.
-    // If this URL was already fetched with CORS (by addshape), a non-CORS fetch of the
-    // same URL will trigger onerror due to cache key mismatch in some browsers.
-    img.crossOrigin = 'anonymous';
+    // No crossOrigin — stays consistent with addshape and the DOM <img> thumbnails
+    // (all loaded without CORS headers so the browser cache isn't polluted).
     img.onload = () => {
       this._bgpicImg = img;
       this._drawBgpic();
