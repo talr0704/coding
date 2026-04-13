@@ -183,7 +183,7 @@ function _buildTurtleModule(engine) {
           if (_url === undefined) return new Sk.builtin.str('nopic');
           engine.bgpic(_js(_url));
         }),
-        setup:     _fn(() => {}),
+        setup:     _fn((_w, _h) => { if (_w && _h) engine.resize(_js(_w), _js(_h)); }),
         title:     _fn(() => {}),
         exitonclick: _fn(() => {}),
         tracer:    _fn(() => {}),
@@ -207,7 +207,7 @@ function _buildTurtleModule(engine) {
   mod.done      = mod.mainloop = _fn(() => {});
   mod.exitonclick = _fn(() => {});
   mod.title     = _fn(() => {});
-  mod.setup     = _fn(() => {});
+  mod.setup     = _fn((_w, _h) => { if (_w && _h) engine.resize(_js(_w), _js(_h)); });
 
   // ── stamp / dot / write ───────────────────────────────────────────────────
   mod.stamp  = _fn(() => { engine.stamp(id); });
