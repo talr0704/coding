@@ -7,15 +7,12 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Users can only read/write files inside their own folder.
-    // Path pattern:  users/{userId}/projects/{projectId}/{filename}
-    match /users/{userId}/{allPaths=**} {
-
-      // Allow authenticated users to read their own files (no size/type check on reads).
-      allow read: if request.auth != null
-                  && request.auth.uid == userId;
-
-      // Writes: authenticated owner only, images only, max 1 MB.
+    // Project images: public read so bgpic() / shape() can load them in the
+    // browser without authentication (the file path already contains the userId
+    // and projectId, so URLs are not guessable without knowing those IDs).
+    // Writes remain strictly owner-only, images-only, max 1 MB.
+    match /users/{userId}/projects/{projectId}/{filename} {
+      allow read: if true;
       allow write: if request.auth != null
                    && request.auth.uid == userId
                    && request.resource.size <= 1 * 1024 * 1024
