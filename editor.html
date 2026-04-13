@@ -68,6 +68,7 @@
       </div>
 
       <!-- Turtle canvas — shown automatically when turtle is imported -->
+      <div id="turtle-resize-handle" class="turtle-v-resize" style="display:none;"></div>
       <div id="turtle-output-section" style="display:none;">
         <div class="output-toolbar">
           <span class="output-label">🐢 Turtle</span>
@@ -378,9 +379,11 @@
       const hasTurtle = usesTurtle(mainCode);
       if (hasTurtle) {
         turtleSection.style.display = "flex";
+        document.getElementById("turtle-resize-handle").style.display = "block";
         turtleCanvas.innerHTML = "";  // TurtleEngine will rebuild canvases
       } else {
         turtleSection.style.display = "none";
+        document.getElementById("turtle-resize-handle").style.display = "none";
       }
 
       // Build extra files (all .py except main.py)
@@ -561,7 +564,7 @@
       }
     });
 
-    // ── Resize handle ────────────────────────────────────────
+    // ── Horizontal resize handle (code ↔ output) ────────────────────────────
     const resizeHandle = document.getElementById("resize-handle");
     const codePanel    = document.getElementById("code-panel");
     const outputPanel  = document.getElementById("output-panel");
@@ -586,6 +589,35 @@
     document.addEventListener("mouseup", () => {
       isResizing = false;
       document.body.style.cursor    = "";
+      document.body.style.userSelect = "";
+    });
+
+    // ── Vertical resize handle (output text ↔ turtle canvas) ────────────────
+    const turtleVHandle = document.getElementById("turtle-resize-handle");
+    let vResizing = false;
+    let vStartY   = 0;
+    let vStartH   = 0;
+
+    turtleVHandle.addEventListener("mousedown", e => {
+      vResizing = true;
+      vStartY   = e.clientY;
+      vStartH   = turtleSection.getBoundingClientRect().height;
+      turtleVHandle.classList.add("dragging");
+      document.body.style.cursor     = "ns-resize";
+      document.body.style.userSelect = "none";
+    });
+    document.addEventListener("mousemove", e => {
+      if (!vResizing) return;
+      const panelH = outputPanel.getBoundingClientRect().height;
+      const delta  = vStartY - e.clientY;          // drag up → bigger turtle
+      const newH   = Math.max(80, Math.min(panelH - 60, vStartH + delta));
+      turtleSection.style.height = newH + "px";
+    });
+    document.addEventListener("mouseup", () => {
+      if (!vResizing) return;
+      vResizing = false;
+      turtleVHandle.classList.remove("dragging");
+      document.body.style.cursor     = "";
       document.body.style.userSelect = "";
     });
   </script>

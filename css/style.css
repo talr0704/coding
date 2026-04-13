@@ -624,10 +624,22 @@ body {
 
 /* ── TURTLE CANVAS SECTION ───────────────────────── */
 
-#turtle-output-section {
-  border-top: 2px solid #2d2b55;
+/* Vertical drag handle between output text and turtle canvas */
+.turtle-v-resize {
+  height: 6px;
+  cursor: ns-resize;
   flex-shrink: 0;
-  max-height: 50%;
+  background: #2d2b55;
+  transition: background 0.15s;
+}
+.turtle-v-resize:hover,
+.turtle-v-resize.dragging { background: #a78bfa; }
+
+#turtle-output-section {
+  border-top: none;
+  flex-shrink: 0;
+  height: 320px;   /* default; adjusted by vertical drag */
+  min-height: 80px;
 }
 
 #turtle-canvas {
