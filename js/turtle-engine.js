@@ -9,9 +9,6 @@
 //   (0, 0) = centre of canvas, positive Y = up, heading 0 = East.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const _TK_W = 480;
-const _TK_H = 480;
-
 function _rad(deg) { return deg * Math.PI / 180; }
 
 // Built-in shape renderers.  Each should draw a shape pointing RIGHT (East).
@@ -59,9 +56,9 @@ const _BUILTIN = {
 };
 
 class _TurtleState {
-  constructor() {
-    this.x         = _TK_W / 2;
-    this.y         = _TK_H / 2;
+  constructor(cx = 240, cy = 240) {
+    this.x         = cx;
+    this.y         = cy;
     this.heading   = 0;           // degrees; 0 = East
     this.penDown   = true;
     this.penColor  = '#000000';
@@ -76,6 +73,10 @@ class _TurtleState {
 class TurtleEngine {
   constructor(containerEl) {
     this._container = containerEl;
+
+    // Canvas dimensions (changeable via resize / setup)
+    this.W = 480;
+    this.H = 480;
 
     // Shape registry: name → 'builtin' | url-string
     this._shapeReg = Object.fromEntries(Object.keys(_BUILTIN).map(k => [k, 'builtin']));
@@ -103,7 +104,7 @@ class TurtleEngine {
     this._wrap = document.createElement('div');
     Object.assign(this._wrap.style, {
       position: 'relative', display: 'inline-block',
-      width: _TK_W + 'px', height: _TK_H + 'px',
+      width: this.W + 'px', height: this.H + 'px',
       backgroundColor: this.bgColor
     });
 
@@ -137,16 +138,49 @@ class TurtleEngine {
 
   _mkCanvas(id) {
     const c = document.createElement('canvas');
-    c.id = id; c.width = _TK_W; c.height = _TK_H;
+    c.id = id; c.width = this.W; c.height = this.H;
     c.style.display = 'block';
     return c;
+  }
+
+  // ── Resize ────────────────────────────────────────────────────────────────
+
+  /**
+   * Resize all canvas layers and reposition turtles to the new centre.
+   * Mirrors wn.setup(width, height) in Python turtle.
+   */
+  resize(w, h) {
+    w = Math.round(w); h = Math.round(h);
+    if (w < 1 || h < 1) return;
+    const oldW = this.W, oldH = this.H;
+    this.W = w; this.H = h;
+
+    // Resize wrapper div
+    this._wrap.style.width  = w + 'px';
+    this._wrap.style.height = h + 'px';
+
+    // Resize all three canvases (setting width/height clears their content)
+    for (const c of [this._bgC, this._lineC, this._sprC]) {
+      c.width  = w;
+      c.height = h;
+    }
+
+    // Move turtles proportionally to preserve relative positions
+    Object.values(this._turtles).forEach(t => {
+      t.x = (t.x - oldW / 2) * (w / oldW) + w / 2;
+      t.y = (t.y - oldH / 2) * (h / oldH) + h / 2;
+    });
+
+    // Redraw background and sprites (line canvas was cleared by resize)
+    this._drawBgpic();
+    this._redrawSprites();
   }
 
   // ── Turtle lifecycle ──────────────────────────────────────────────────────
 
   newTurtle() {
     const id = this._nextId++;
-    this._turtles[id] = new _TurtleState();
+    this._turtles[id] = new _TurtleState(this.W / 2, this.H / 2);
     this._redrawSprites();
     return id;
   }
@@ -171,7 +205,7 @@ class TurtleEngine {
 
   goto(id, tx, ty) {
     // Python turtle coords → canvas coords
-    this._moveTo(id, _TK_W / 2 + tx, _TK_H / 2 - ty);
+    this._moveTo(id, this.W / 2 + tx, this.H / 2 - ty);
   }
 
   setx(id, tx) { this.goto(id, tx, this.ycor(id)); }
@@ -294,8 +328,8 @@ class TurtleEngine {
 
   // ── State getters ─────────────────────────────────────────────────────────
 
-  xcor(id)    { return this._turtles[id].x - _TK_W / 2; }
-  ycor(id)    { return -( this._turtles[id].y - _TK_H / 2 ); }
+  xcor(id)    { return this._turtles[id].x - this.W / 2; }
+  ycor(id)    { return -( this._turtles[id].y - this.H / 2 ); }
   heading(id) { return this._turtles[id].heading; }
   isdown(id)  { return this._turtles[id].penDown; }
 
@@ -308,7 +342,7 @@ class TurtleEngine {
 
   bgpic(nameOrUrl) {
     // Always clear the bg canvas first
-    this._bgCtx.clearRect(0, 0, _TK_W, _TK_H);
+    this._bgCtx.clearRect(0, 0, this.W, this.H);
     this._bgpicImg = null;
     this._bgpicUrl = null;
 
@@ -337,26 +371,26 @@ class TurtleEngine {
   _drawBgpic() {
     if (!this._bgpicImg) return;
     const ctx = this._bgCtx;
-    ctx.clearRect(0, 0, _TK_W, _TK_H);
-    const iw = this._bgpicImg.naturalWidth  || _TK_W;
-    const ih = this._bgpicImg.naturalHeight || _TK_H;
+    ctx.clearRect(0, 0, this.W, this.H);
+    const iw = this._bgpicImg.naturalWidth  || this.W;
+    const ih = this._bgpicImg.naturalHeight || this.H;
     // Scale to cover: fill the entire canvas, maintain aspect ratio, crop excess
-    const scale = Math.max(_TK_W / iw, _TK_H / ih);
+    const scale = Math.max(this.W / iw, this.H / ih);
     const sw = iw * scale, sh = ih * scale;
-    ctx.drawImage(this._bgpicImg, (_TK_W - sw) / 2, (_TK_H - sh) / 2, sw, sh);
+    ctx.drawImage(this._bgpicImg, (this.W - sw) / 2, (this.H - sh) / 2, sw, sh);
   }
 
   // ── Clear / Reset ─────────────────────────────────────────────────────────
 
   clearAll() {
-    this._lCtx.clearRect(0, 0, _TK_W, _TK_H);
+    this._lCtx.clearRect(0, 0, this.W, this.H);
     this._redrawSprites();
   }
 
   clearTurtle(id) { this.clearAll(); }  // simplified; selective clear not supported
 
   resetAll() {
-    this._lCtx.clearRect(0, 0, _TK_W, _TK_H);
+    this._lCtx.clearRect(0, 0, this.W, this.H);
     Object.values(this._turtles).forEach(t => this._resetState(t));
     this._redrawSprites();
   }
@@ -382,7 +416,7 @@ class TurtleEngine {
   // ── Private ───────────────────────────────────────────────────────────────
 
   _resetState(t) {
-    t.x = _TK_W / 2; t.y = _TK_H / 2;
+    t.x = this.W / 2; t.y = this.H / 2;
     t.heading = 0; t.penDown = true;
     t.penColor = '#000000'; t.fillColor = '#000000';
     t.penWidth = 1; t.visible = true; t.fillPath = null;
@@ -409,7 +443,7 @@ class TurtleEngine {
 
   _redrawSprites() {
     const ctx = this._sCtx;
-    ctx.clearRect(0, 0, _TK_W, _TK_H);
+    ctx.clearRect(0, 0, this.W, this.H);
     Object.values(this._turtles).forEach(t => {
       if (t.visible) this._paintSprite(ctx, t);
     });
