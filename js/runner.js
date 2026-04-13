@@ -152,6 +152,10 @@ function _buildTurtleModule(engine) {
   });
   mod.begin_fill = _fn(() => { engine.beginFill(id); });
   mod.end_fill   = _fn(() => { engine.endFill(id); });
+  mod.fill       = _fn((_flag) => {
+    if (_flag === undefined) return new Sk.builtin.bool(engine._turtles[id].fillPath !== null);
+    if (_js(_flag)) engine.beginFill(id); else engine.endFill(id);
+  });
 
   // ── shape / visibility ────────────────────────────────────────────────────
   mod.shape      = _fn((_n) => {
@@ -197,6 +201,11 @@ function _buildTurtleModule(engine) {
         register_shape: _fn((_url) => {
           const url = _js(_url); engine.addshape(url, _resolveShapeUrl(url));
         }),
+        colormode: _fn((_m) => new Sk.builtin.float_(1.0)),
+        delay:     _fn(() => {}),
+        setworldcoordinates: _fn(() => {}),
+        window_height: _fn(() => new Sk.builtin.int_(engine.H)),
+        window_width:  _fn(() => new Sk.builtin.int_(engine.W)),
       };
       return methods[name] ?? new Sk.builtin.func(() => Sk.builtin.none.none$);
     };
@@ -208,6 +217,12 @@ function _buildTurtleModule(engine) {
   mod.exitonclick = _fn(() => {});
   mod.title     = _fn(() => {});
   mod.setup     = _fn((_w, _h) => { if (_w && _h) engine.resize(_js(_w), _js(_h)); });
+  mod.colormode = _fn((_m) => { return new Sk.builtin.float_(1.0); });
+  mod.delay     = _fn(() => {});
+  mod.setworldcoordinates = _fn(() => {});
+  mod.turtles   = _fn(() => new Sk.builtin.list([]));
+  mod.window_height = _fn(() => new Sk.builtin.int_(engine.H));
+  mod.window_width  = _fn(() => new Sk.builtin.int_(engine.W));
 
   // ── stamp / dot / write ───────────────────────────────────────────────────
   mod.stamp  = _fn(() => { engine.stamp(id); });
@@ -294,6 +309,7 @@ function _buildTurtleModule(engine) {
       color:    _m((p, f)  => engine.color(tid, _js(p), f !== undefined ? _js(f) : null)),
       begin_fill: _m(()    => engine.beginFill(tid)),
       end_fill:   _m(()    => engine.endFill(tid)),
+      fill:       _m((f)   => { if (f === undefined) return new Sk.builtin.bool(engine._turtles[tid].fillPath !== null); if (_js(f)) engine.beginFill(tid); else engine.endFill(tid); }),
       shape:    _m((n)     => { if (n !== undefined) engine.shape(tid, _js(n)); }),
       addshape: _m((url)   => { const u = _js(url); engine.addshape(u, _resolveShapeUrl(u)); }),
       hideturtle: _m(()    => engine.hideturtle(tid)),
