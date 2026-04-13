@@ -7,7 +7,6 @@ import {
   getStorage,
   ref,
   uploadBytesResumable,
-  getDownloadURL,
   deleteObject
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
@@ -47,7 +46,11 @@ export async function uploadProjectImage(userId, projectId, file, onProgress) {
     );
   });
 
-  const url = await getDownloadURL(storageRef);
+  // Build a stable, tokenless public URL.
+  // With "allow read: if true" in storage.rules this never expires and never
+  // gets invalidated when the file is deleted/re-uploaded (unlike download tokens).
+  const bucket = _storage.app.options.storageBucket;
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(storagePath)}?alt=media`;
   return { url, name: file.name, storagePath, size: file.size, type: file.type };
 }
 
