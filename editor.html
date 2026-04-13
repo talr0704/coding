@@ -67,8 +67,7 @@
         </div>
       </div>
 
-      <!-- Turtle canvas — shown automatically when turtle is imported -->
-      <div id="turtle-resize-handle" class="turtle-v-resize" style="display:none;"></div>
+      <!-- Turtle canvas — floating panel, shown when turtle is imported -->
       <div id="turtle-output-section" style="display:none;">
         <div class="output-toolbar">
           <span class="output-label">🐢 Turtle</span>
@@ -87,6 +86,7 @@
           </div>
         </div>
         <div id="turtle-canvas"></div>
+        <div class="turtle-resize-grip" id="turtle-resize-grip"></div>
       </div>
 
       <!-- HTML preview -->
@@ -379,11 +379,9 @@
       const hasTurtle = usesTurtle(mainCode);
       if (hasTurtle) {
         turtleSection.style.display = "flex";
-        document.getElementById("turtle-resize-handle").style.display = "block";
         turtleCanvas.innerHTML = "";  // TurtleEngine will rebuild canvases
       } else {
         turtleSection.style.display = "none";
-        document.getElementById("turtle-resize-handle").style.display = "none";
       }
 
       // Build extra files (all .py except main.py)
@@ -592,33 +590,56 @@
       document.body.style.userSelect = "";
     });
 
-    // ── Vertical resize handle (output text ↔ turtle canvas) ────────────────
-    const turtleVHandle = document.getElementById("turtle-resize-handle");
-    let vResizing = false;
-    let vStartY   = 0;
-    let vStartH   = 0;
+    // ── Turtle floating panel: drag (toolbar) + resize (corner grip) ─────────
+    const turtleToolbar = turtleSection.querySelector(".output-toolbar");
+    const turtleGrip    = document.getElementById("turtle-resize-grip");
 
-    turtleVHandle.addEventListener("mousedown", e => {
-      vResizing = true;
-      vStartY   = e.clientY;
-      vStartH   = turtleSection.getBoundingClientRect().height;
-      turtleVHandle.classList.add("dragging");
-      document.body.style.cursor     = "ns-resize";
+    // Drag state
+    let tkDragging = false, tkDragX = 0, tkDragY = 0, tkPanelL = 0, tkPanelT = 0;
+
+    turtleToolbar.addEventListener("mousedown", e => {
+      if (e.target.closest("button, select, label")) return;
+      tkDragging = true;
+      tkDragX = e.clientX; tkDragY = e.clientY;
+      const r = turtleSection.getBoundingClientRect();
+      tkPanelL = r.left; tkPanelT = r.top;
       document.body.style.userSelect = "none";
+      document.body.style.cursor     = "move";
     });
+
+    // Resize state
+    let tkResizing = false, tkResX = 0, tkResY = 0, tkResW = 0, tkResH = 0;
+
+    turtleGrip.addEventListener("mousedown", e => {
+      tkResizing = true;
+      tkResX = e.clientX; tkResY = e.clientY;
+      const r = turtleSection.getBoundingClientRect();
+      tkResW = r.width; tkResH = r.height;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor     = "nwse-resize";
+      e.stopPropagation();
+    });
+
     document.addEventListener("mousemove", e => {
-      if (!vResizing) return;
-      const panelH = outputPanel.getBoundingClientRect().height;
-      const delta  = vStartY - e.clientY;          // drag up → bigger turtle
-      const newH   = Math.max(80, Math.min(panelH - 60, vStartH + delta));
-      turtleSection.style.height = newH + "px";
+      if (tkDragging) {
+        const newL = Math.max(0, Math.min(window.innerWidth  - 60, tkPanelL + e.clientX - tkDragX));
+        const newT = Math.max(0, Math.min(window.innerHeight - 40, tkPanelT + e.clientY - tkDragY));
+        turtleSection.style.left  = newL + "px";
+        turtleSection.style.top   = newT + "px";
+        turtleSection.style.right = "auto";
+      }
+      if (tkResizing) {
+        turtleSection.style.width  = Math.max(220, tkResW + (e.clientX - tkResX)) + "px";
+        turtleSection.style.height = Math.max(130, tkResH + (e.clientY - tkResY)) + "px";
+      }
     });
+
     document.addEventListener("mouseup", () => {
-      if (!vResizing) return;
-      vResizing = false;
-      turtleVHandle.classList.remove("dragging");
-      document.body.style.cursor     = "";
-      document.body.style.userSelect = "";
+      if (tkDragging || tkResizing) {
+        tkDragging = tkResizing = false;
+        document.body.style.cursor     = "";
+        document.body.style.userSelect = "";
+      }
     });
   </script>
 </body>
