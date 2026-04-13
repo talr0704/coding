@@ -629,7 +629,7 @@ body {
   top: 60px;
   right: 20px;
   width: 520px;
-  height: 440px;
+  height: 530px;   /* tall enough for default 480px canvas + toolbar */
   min-width: 220px;
   min-height: 130px;
   border: 2px solid #3d3b62;
@@ -645,6 +645,20 @@ body {
   cursor: move;
   user-select: none;
 }
+
+/* Top-edge resize handle — drag upward to enlarge */
+.turtle-top-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  cursor: ns-resize;
+  background: transparent;
+  z-index: 2;
+  transition: background 0.15s;
+}
+.turtle-top-resize:hover { background: #a78bfa; }
 
 /* Bottom-right corner resize grip */
 .turtle-resize-grip {

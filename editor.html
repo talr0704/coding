@@ -69,6 +69,7 @@
 
       <!-- Turtle canvas — floating panel, shown when turtle is imported -->
       <div id="turtle-output-section" style="display:none;">
+        <div id="turtle-top-resize" class="turtle-top-resize"></div>
         <div class="output-toolbar">
           <span class="output-label">🐢 Turtle</span>
           <div class="turtle-toolbar-right">
@@ -590,11 +591,12 @@
       document.body.style.userSelect = "";
     });
 
-    // ── Turtle floating panel: drag (toolbar) + resize (corner grip) ─────────
-    const turtleToolbar = turtleSection.querySelector(".output-toolbar");
-    const turtleGrip    = document.getElementById("turtle-resize-grip");
+    // ── Turtle floating panel: drag (toolbar) + resize (top edge + corner) ─────
+    const turtleToolbar  = turtleSection.querySelector(".output-toolbar");
+    const turtleGrip     = document.getElementById("turtle-resize-grip");
+    const turtleTopEdge  = document.getElementById("turtle-top-resize");
 
-    // Drag state
+    // Drag (move whole panel)
     let tkDragging = false, tkDragX = 0, tkDragY = 0, tkPanelL = 0, tkPanelT = 0;
 
     turtleToolbar.addEventListener("mousedown", e => {
@@ -607,7 +609,7 @@
       document.body.style.cursor     = "move";
     });
 
-    // Resize state
+    // Resize from bottom-right corner grip
     let tkResizing = false, tkResX = 0, tkResY = 0, tkResW = 0, tkResH = 0;
 
     turtleGrip.addEventListener("mousedown", e => {
@@ -617,6 +619,20 @@
       tkResW = r.width; tkResH = r.height;
       document.body.style.userSelect = "none";
       document.body.style.cursor     = "nwse-resize";
+      e.stopPropagation();
+    });
+
+    // Resize from top edge — drag up = taller (bottom stays fixed)
+    let tkTopRes = false, tkTopStartY = 0, tkTopStartH = 0, tkTopStartT = 0;
+
+    turtleTopEdge.addEventListener("mousedown", e => {
+      tkTopRes = true;
+      tkTopStartY = e.clientY;
+      const r = turtleSection.getBoundingClientRect();
+      tkTopStartH = r.height;
+      tkTopStartT = r.top;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor     = "ns-resize";
       e.stopPropagation();
     });
 
@@ -632,11 +648,19 @@
         turtleSection.style.width  = Math.max(220, tkResW + (e.clientX - tkResX)) + "px";
         turtleSection.style.height = Math.max(130, tkResH + (e.clientY - tkResY)) + "px";
       }
+      if (tkTopRes) {
+        const delta  = e.clientY - tkTopStartY;          // negative = dragged up
+        const newH   = Math.max(130, tkTopStartH - delta);
+        const newTop = Math.max(0, tkTopStartT + delta);
+        turtleSection.style.height = newH   + "px";
+        turtleSection.style.top    = newTop + "px";
+        turtleSection.style.right  = "auto";
+      }
     });
 
     document.addEventListener("mouseup", () => {
-      if (tkDragging || tkResizing) {
-        tkDragging = tkResizing = false;
+      if (tkDragging || tkResizing || tkTopRes) {
+        tkDragging = tkResizing = tkTopRes = false;
         document.body.style.cursor     = "";
         document.body.style.userSelect = "";
       }
