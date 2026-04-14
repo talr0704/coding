@@ -115,7 +115,7 @@
     </div>
     <div id="output-area"></div>
     <div id="turtle-canvas"></div>
-    <iframe id="html-preview" sandbox="allow-scripts allow-same-origin"></iframe>
+    <iframe id="html-preview" sandbox="allow-scripts"></iframe>
   </div>
 
   <!-- Skulpt -->
@@ -150,24 +150,26 @@
       loadingEl.innerHTML = `<span>${msg}</span>`;
     }
 
-    if (!ownerUid || !projectId) {
-      showError("קישור שגוי.");
-    } else {
+    function escHtml(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    // Wrap in async IIFE — top-level return is illegal in ES modules
+    (async () => {
+      if (!ownerUid || !projectId) { showError("קישור שגוי."); return; }
+
       try {
-        // Load project — works when Firestore rules allow public read
         const snap = await getDoc(doc(db, "users", ownerUid, "projects", projectId));
         if (!snap.exists()) { showError("הפרויקט לא נמצא."); return; }
 
         const data = { id: snap.id, ...snap.data() };
         const projectType = data.type || "python";
 
-        // Update header
         const title = data.title || "ללא שם";
         titleEl.textContent = title;
         document.title      = title + " — CodeKids";
         editBtn.href        = `editor.html?id=${projectId}&type=${projectType}`;
 
-        // Normalise code structure
         let files = {};
         if (typeof data.code === "object" && data.code !== null) {
           files = data.code;
@@ -188,28 +190,20 @@
         const mainCode  = files["main.py"] || Object.values(files)[0] || "";
         const hasTurtle = usesTurtle(mainCode);
 
-        if (hasTurtle) {
-          turtleCanvas.style.display = "flex";
-        } else {
-          outputArea.style.display = "block";
-        }
+        if (hasTurtle) { turtleCanvas.style.display = "flex"; }
+        else            { outputArea.style.display   = "block"; }
 
-        // Image map for shape pre-registration
         const imgMap = {};
         (data.images || []).forEach(img => {
           const clean = img.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
           imgMap[clean] = img.url;
         });
 
-        // Extra .py files
         const extraFiles = {};
         Object.entries(files).forEach(([name, code]) => {
           if (name !== "main.py" && name.endsWith(".py")) extraFiles[name] = code;
         });
 
-        function escHtml(s) {
-          return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-        }
         function appendText(text, cls = "") {
           outputArea.style.display = "block";
           const line = document.createElement("div");
@@ -219,10 +213,9 @@
         }
 
         const result = await runPython({
-          mainCode,
-          extraFiles,
+          mainCode, extraFiles,
           onOutput: text => appendText(text),
-          onInput:  () => Promise.resolve(""),   // no input in view mode
+          onInput:  () => Promise.resolve(""),
           turtleTarget:  hasTurtle ? "turtle-canvas" : null,
           projectImages: hasTurtle ? imgMap : null
         });
@@ -248,7 +241,7 @@
           : "לא ניתן לטעון את הפרויקט.";
         showError(msg);
       }
-    }
+    })();
   </script>
 </body>
 </html>
