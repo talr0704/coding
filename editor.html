@@ -67,9 +67,9 @@
         </div>
       </div>
 
-      <!-- Turtle canvas — floating panel, shown when turtle is imported -->
+      <!-- Turtle canvas — embedded below console, shown when turtle is imported -->
+      <div id="turtle-resize-handle" class="turtle-v-resize" style="display:none;"></div>
       <div id="turtle-output-section" style="display:none;">
-        <div id="turtle-top-resize" class="turtle-top-resize"></div>
         <div class="output-toolbar">
           <span class="output-label">🐢 Turtle</span>
           <div class="turtle-toolbar-right">
@@ -87,7 +87,6 @@
           </div>
         </div>
         <div id="turtle-canvas"></div>
-        <div class="turtle-resize-grip" id="turtle-resize-grip"></div>
       </div>
 
       <!-- HTML preview -->
@@ -378,11 +377,19 @@
 
       // Detect turtle usage and prepare canvas
       const hasTurtle = usesTurtle(mainCode);
+      const tkHandle  = document.getElementById("turtle-resize-handle");
       if (hasTurtle) {
+        // Default height = half the output panel on first show
+        if (!turtleSection.dataset.initH) {
+          turtleSection.style.height  = Math.round(outputPanel.getBoundingClientRect().height * 0.5) + "px";
+          turtleSection.dataset.initH = "1";
+        }
         turtleSection.style.display = "flex";
+        tkHandle.style.display      = "block";
         turtleCanvas.innerHTML = "";  // TurtleEngine will rebuild canvases
       } else {
         turtleSection.style.display = "none";
+        tkHandle.style.display      = "none";
       }
 
       // Build extra files (all .py except main.py)
@@ -591,79 +598,31 @@
       document.body.style.userSelect = "";
     });
 
-    // ── Turtle floating panel: drag (toolbar) + resize (top edge + corner) ─────
-    const turtleToolbar  = turtleSection.querySelector(".output-toolbar");
-    const turtleGrip     = document.getElementById("turtle-resize-grip");
-    const turtleTopEdge  = document.getElementById("turtle-top-resize");
+    // ── Vertical divider: drag to resize console ↕ turtle section ──────────
+    const tkHandle  = document.getElementById("turtle-resize-handle");
+    let vResizing = false, vStartY = 0, vStartH = 0;
 
-    // Drag (move whole panel)
-    let tkDragging = false, tkDragX = 0, tkDragY = 0, tkPanelL = 0, tkPanelT = 0;
-
-    turtleToolbar.addEventListener("mousedown", e => {
-      if (e.target.closest("button, select, label")) return;
-      tkDragging = true;
-      tkDragX = e.clientX; tkDragY = e.clientY;
-      const r = turtleSection.getBoundingClientRect();
-      tkPanelL = r.left; tkPanelT = r.top;
-      document.body.style.userSelect = "none";
-      document.body.style.cursor     = "move";
-    });
-
-    // Resize from bottom-right corner grip
-    let tkResizing = false, tkResX = 0, tkResY = 0, tkResW = 0, tkResH = 0;
-
-    turtleGrip.addEventListener("mousedown", e => {
-      tkResizing = true;
-      tkResX = e.clientX; tkResY = e.clientY;
-      const r = turtleSection.getBoundingClientRect();
-      tkResW = r.width; tkResH = r.height;
-      document.body.style.userSelect = "none";
-      document.body.style.cursor     = "nwse-resize";
-      e.stopPropagation();
-    });
-
-    // Resize from top edge — drag up = taller (bottom stays fixed)
-    let tkTopRes = false, tkTopStartY = 0, tkTopStartH = 0, tkTopStartT = 0;
-
-    turtleTopEdge.addEventListener("mousedown", e => {
-      tkTopRes = true;
-      tkTopStartY = e.clientY;
-      const r = turtleSection.getBoundingClientRect();
-      tkTopStartH = r.height;
-      tkTopStartT = r.top;
-      document.body.style.userSelect = "none";
+    tkHandle.addEventListener("mousedown", e => {
+      vResizing = true;
+      vStartY   = e.clientY;
+      vStartH   = turtleSection.getBoundingClientRect().height;
+      tkHandle.classList.add("active");
       document.body.style.cursor     = "ns-resize";
-      e.stopPropagation();
+      document.body.style.userSelect = "none";
     });
-
     document.addEventListener("mousemove", e => {
-      if (tkDragging) {
-        const newL = Math.max(0, Math.min(window.innerWidth  - 60, tkPanelL + e.clientX - tkDragX));
-        const newT = Math.max(0, Math.min(window.innerHeight - 40, tkPanelT + e.clientY - tkDragY));
-        turtleSection.style.left  = newL + "px";
-        turtleSection.style.top   = newT + "px";
-        turtleSection.style.right = "auto";
-      }
-      if (tkResizing) {
-        turtleSection.style.width  = Math.max(220, tkResW + (e.clientX - tkResX)) + "px";
-        turtleSection.style.height = Math.max(130, tkResH + (e.clientY - tkResY)) + "px";
-      }
-      if (tkTopRes) {
-        const delta  = e.clientY - tkTopStartY;          // negative = dragged up
-        const newH   = Math.max(130, tkTopStartH - delta);
-        const newTop = Math.max(0, tkTopStartT + delta);
-        turtleSection.style.height = newH   + "px";
-        turtleSection.style.top    = newTop + "px";
-        turtleSection.style.right  = "auto";
-      }
+      if (!vResizing) return;
+      const panelH = outputPanel.getBoundingClientRect().height;
+      const delta  = vStartY - e.clientY;          // drag up → taller turtle
+      const newH   = Math.max(60, Math.min(panelH - 60, vStartH + delta));
+      turtleSection.style.height = newH + "px";
     });
-
     document.addEventListener("mouseup", () => {
-      if (tkDragging || tkResizing || tkTopRes) {
-        tkDragging = tkResizing = tkTopRes = false;
-        document.body.style.cursor     = "";
-        document.body.style.userSelect = "";
-      }
+      if (!vResizing) return;
+      vResizing = false;
+      tkHandle.classList.remove("active");
+      document.body.style.cursor     = "";
+      document.body.style.userSelect = "";
     });
   </script>
 </body>
