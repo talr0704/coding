@@ -314,12 +314,18 @@ class TurtleEngine {
 
   stamp(id) { this._paintSprite(this._lCtx, this._turtles[id]); }
 
-  write(id, text, align) {
+  write(id, text, align, font) {
     const t = this._turtles[id];
     const ctx = this._lCtx;
     ctx.save();
-    ctx.fillStyle    = t.penColor;
-    ctx.font         = '14px sans-serif';
+    ctx.fillStyle = t.penColor;
+    if (Array.isArray(font) && font.length >= 2) {
+      const [family, size, style] = font;
+      const cssStyle = (style === 'bold' || style === 'italic') ? style : 'normal';
+      ctx.font = `${cssStyle} ${size}px "${family}"`;
+    } else {
+      ctx.font = '14px sans-serif';
+    }
     ctx.textAlign    = (align === 'center' || align === 'right') ? align : 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(String(text), t.x, t.y);
