@@ -126,12 +126,14 @@
 
   <script type="module">
     import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth }         from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { FIREBASE_CONFIG } from "./js/config.js";
     import { runPython, formatPythonError, usesTurtle } from "./js/runner.js";
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const db  = getFirestore(app);
+    const app  = initializeApp(FIREBASE_CONFIG);
+    getAuth(app);                   // must initialise Auth so Firestore doesn't hang
+    const db   = getFirestore(app);
 
     const params    = new URLSearchParams(location.search);
     const ownerUid  = params.get("uid");
@@ -241,7 +243,10 @@
 
       } catch (e) {
         console.error(e);
-        showError("לא ניתן לטעון את הפרויקט — ייתכן שהוא פרטי.");
+        const msg = String(e).includes("permission")
+          ? "הגישה נדחתה — עדכן את כללי Firestore כדי לאפשר צפייה ציבורית."
+          : "לא ניתן לטעון את הפרויקט.";
+        showError(msg);
       }
     }
   </script>
