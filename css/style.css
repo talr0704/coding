@@ -492,6 +492,15 @@ body {
 }
 .btn-upload-img:hover { background: rgba(59,130,246,0.25); }
 
+.btn-view {
+  background: rgba(20,184,166,0.15); color: #5eead4;
+  border: 1.5px solid rgba(20,184,166,0.35);
+  font-family: 'Nunito', sans-serif; font-size: 0.85rem; font-weight: 700;
+  padding: 0.4rem 0.8rem; border-radius: 8px; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-view:hover { background: rgba(20,184,166,0.25); }
+
 /* Editor layout */
 .editor-layout {
   display: flex; flex: 1; overflow: hidden; min-height: 0;

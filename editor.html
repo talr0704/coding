@@ -25,6 +25,7 @@
     <div class="editor-topbar-right">
       <span id="save-status" class="save-status">● Saved</span>
       <button class="btn-upload-img" id="upload-img-btn" title="Upload image to project">🖼️ Image</button>
+      <button class="btn-view" id="view-btn" title="Open view-only link in new tab">👁 View</button>
       <button class="btn-run"  id="run-btn">▶ Run</button>
       <button class="btn-save" id="save-btn">💾 Save</button>
     </div>
@@ -312,6 +313,14 @@
 
     saveBtn.addEventListener("click", triggerSave);
     setInterval(() => { if (unsaved) triggerSave(); }, 30000);
+
+    // ── View button — copy share link ────────────────────────────────────────
+    document.getElementById("view-btn").addEventListener("click", () => {
+      if (!currentUser || !projectId) return;
+      const base = location.origin + location.pathname.replace(/[^/]*$/, "");
+      const url  = `${base}view.html?uid=${currentUser.uid}&id=${projectId}`;
+      window.open(url, "_blank");
+    });
     window.addEventListener("beforeunload", e => { if (unsaved) { e.preventDefault(); e.returnValue = ""; } });
 
     // ── Output helpers ───────────────────────────────────────
