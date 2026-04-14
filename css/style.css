@@ -622,76 +622,32 @@ body {
 
 .html-preview { flex: 1; border: none; background: white; }
 
-/* ── TURTLE FLOATING PANEL ───────────────────────── */
+/* ── TURTLE CANVAS SECTION (embedded, resizable) ─── */
 
-#turtle-output-section {
-  position: fixed;
-  top: 60px;
-  right: 20px;
-  width: 520px;
-  height: 530px;   /* tall enough for default 480px canvas + toolbar */
-  min-width: 220px;
-  min-height: 130px;
-  border: 2px solid #3d3b62;
-  border-radius: 10px;
-  background: #0f0f1a;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
-  z-index: 200;
-  overflow: hidden;
-}
-
-/* Toolbar acts as drag handle */
-#turtle-output-section .output-toolbar {
-  cursor: move;
-  user-select: none;
-}
-
-/* Top-edge resize handle — drag upward to enlarge */
-.turtle-top-resize {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 5px;
+/* Horizontal drag handle between console and turtle */
+.turtle-v-resize {
+  height: 6px;
+  flex-shrink: 0;
   cursor: ns-resize;
-  background: transparent;
-  z-index: 2;
+  background: #2d2b55;
   transition: background 0.15s;
 }
-.turtle-top-resize:hover { background: #a78bfa; }
+.turtle-v-resize:hover,
+.turtle-v-resize.active { background: #a78bfa; }
 
-/* Bottom-right corner resize grip */
-.turtle-resize-grip {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 20px;
-  height: 20px;
-  cursor: nwse-resize;
-  z-index: 1;
+#turtle-output-section {
+  flex-shrink: 0;
+  min-height: 60px;
+  /* height set in JS to 50% of panel on first show */
 }
-.turtle-resize-grip::after {
-  content: '';
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 9px;
-  height: 9px;
-  border-right: 2.5px solid #6b6b8b;
-  border-bottom: 2.5px solid #6b6b8b;
-  border-radius: 0 0 2px 0;
-  transition: border-color 0.15s;
-}
-.turtle-resize-grip:hover::after { border-color: #a78bfa; }
 
 #turtle-canvas {
   flex: 1;
   overflow: auto;
   background: white;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 #turtle-canvas canvas {
