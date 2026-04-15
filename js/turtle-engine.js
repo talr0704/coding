@@ -90,6 +90,7 @@ class TurtleEngine {
     // Background image state (drawn on _bgC canvas)
     this._bgpicImg = null;
     this._bgpicUrl = null;
+    this._clickHandler = null;
 
     this._buildDOM();
     this.defaultId = this.newTurtle();
@@ -174,6 +175,24 @@ class TurtleEngine {
     // Redraw background and sprites (line canvas was cleared by resize)
     this._drawBgpic();
     this._redrawSprites();
+  }
+
+  /**
+   * Register a click handler on the canvas.
+   * Callback receives (x, y) in turtle coordinates (origin at centre, y up).
+   * Replaces any previously registered handler.
+   */
+  onCanvasClick(callback) {
+    if (this._clickHandler) {
+      this._wrap.removeEventListener('click', this._clickHandler);
+    }
+    this._clickHandler = (e) => {
+      const rect = this._wrap.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      callback(px - this.W / 2, -(py - this.H / 2));
+    };
+    this._wrap.addEventListener('click', this._clickHandler);
   }
 
   // ── Turtle lifecycle ──────────────────────────────────────────────────────
