@@ -249,17 +249,37 @@ function _buildTurtleModule(engine) {
         setworldcoordinates: _fn(() => {}),
         window_height: _fn(() => new Sk.builtin.int_(engine.H)),
         window_width:  _fn(() => new Sk.builtin.int_(engine.W)),
+        onclick:   _fn((_cb) => { _registerCanvasClick(_cb); }),
+        onscreenclick: _fn((_cb) => { _registerCanvasClick(_cb); }),
+        listen:    _fn(() => {}),
       };
       return methods[name] ?? new Sk.builtin.func(() => Sk.builtin.none.none$);
     };
     return screen;
   });
+  // Helper: register a Python function as canvas click handler
+  function _registerCanvasClick(pyFn) {
+    if (!pyFn || pyFn === Sk.builtin.none.none$) return;
+    engine.onCanvasClick((x, y) => {
+      try {
+        Sk.misceval.callsimArray(pyFn, [
+          new Sk.builtin.float_(x),
+          new Sk.builtin.float_(y)
+        ]);
+      } catch (e) {
+        console.warn('[Turtle] onclick handler error:', e);
+      }
+    });
+  }
+
   mod.tracer    = _fn(() => {});   // no-op (we draw immediately)
   mod.update    = _fn(() => {});
   mod.done      = mod.mainloop = _fn(() => {});
   mod.exitonclick = _fn(() => {});
+  mod.listen    = _fn(() => {});
   mod.title     = _fn(() => {});
   mod.setup     = _fn((_w, _h) => { if (_w && _h) engine.resize(_js(_w), _js(_h)); });
+  mod.onclick   = mod.onscreenclick = _fn((_cb) => { _registerCanvasClick(_cb); });
   mod.colormode = _fn((_m) => { return new Sk.builtin.float_(1.0); });
   mod.delay     = _fn(() => {});
   mod.setworldcoordinates = _fn(() => {});
