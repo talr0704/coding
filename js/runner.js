@@ -122,18 +122,35 @@ function _buildTurtleModule(engine) {
     return null;
   }
 
-  // Build a kwargs-aware write function for a given turtle id
+  // Build a kwargs-aware write function for a given turtle id.
+  // Skulpt 1.x passes kwargs as a plain JS flat array [key1,val1,key2,val2,...]
+  // appended as the last positional argument when co_kwargs=true.
   function _mkWrite(tid) {
-    const f = new Sk.builtin.func(function(_txt, _move, _align, _font, kw) {
+    const f = new Sk.builtin.func(function() {
+      const allArgs = Array.from(arguments);
+
+      // Detect kwargs: Skulpt appends flat JS array [key,val,...] as last arg
+      let posArgs = allArgs;
+      const kwMap = {};
+      if (allArgs.length > 0) {
+        const last = allArgs[allArgs.length - 1];
+        if (Array.isArray(last) && last.length % 2 === 0 &&
+            (last.length === 0 || typeof last[0] === 'string')) {
+          posArgs = allArgs.slice(0, -1);
+          for (let i = 0; i < last.length; i += 2) kwMap[last[i]] = last[i + 1];
+        }
+      }
+
       let align = 'left';
       let font  = null;
-      if (_align !== undefined && _align !== null) align = _js(_align);
-      if (_font  !== undefined && _font  !== null) font  = _jsFont(_font);
-      if (kw) {
-        if (kw.align !== undefined) align = _js(kw.align);
-        if (kw.font  !== undefined) font  = _jsFont(kw.font);
-      }
-      engine.write(tid, _js(_txt), align, font);
+      // positional: write(arg, move=False, align='left', font=(...))
+      if (posArgs[2] !== undefined && posArgs[2] !== null) align = _js(posArgs[2]);
+      if (posArgs[3] !== undefined && posArgs[3] !== null) font  = _jsFont(posArgs[3]);
+      // keyword overrides
+      if (kwMap.align !== undefined) align = _js(kwMap.align);
+      if (kwMap.font  !== undefined) font  = _jsFont(kwMap.font);
+
+      engine.write(tid, _js(posArgs[0]), align, font);
     });
     f.co_kwargs = true;
     return f;
