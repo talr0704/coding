@@ -263,7 +263,8 @@ class TurtleEngine {
     img.onload = () => { this._imgCache[name] = img; this._redrawSprites(); };
     img.onerror = () => {
       console.warn('[Turtle] Could not load shape image:', url, '— falling back to classic.');
-      this._shapeReg[name] = 'builtin';
+      // Keep _shapeReg[name] = url so _resolveShapeUrl can still find it later
+      // (e.g. if storage rules weren't deployed yet when pre-registration ran).
       this._redrawSprites();
     };
     img.src = url;
