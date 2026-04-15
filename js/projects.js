@@ -30,7 +30,6 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  deleteField,
   arrayUnion,
   arrayRemove,
   serverTimestamp,
@@ -101,9 +100,9 @@ export async function publishProject(userId, projectId, { title, type, code, ima
 export async function unpublishProject(userId, projectId, publicId) {
   await deleteDoc(doc(_db, "publicProjects", publicId));
   await updateDoc(docRef(userId, projectId), {
-    publicId:        deleteField(),
-    isPublicPreview: deleteField(),
-    sharedAt:        deleteField(),
+    publicId:        null,
+    isPublicPreview: false,
+    sharedAt:        null,
     updatedAt:       serverTimestamp()
   });
 }
