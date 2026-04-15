@@ -113,6 +113,32 @@ function _buildTurtleModule(engine) {
     return v;
   }
 
+  // Unwrap a Skulpt tuple/list to a JS array of primitives (for font param)
+  function _jsFont(v) {
+    if (!v || v === null) return null;
+    if (v instanceof Sk.builtin.tuple || v instanceof Sk.builtin.list) {
+      return v.v.map(_js);
+    }
+    return null;
+  }
+
+  // Build a kwargs-aware write function for a given turtle id
+  function _mkWrite(tid) {
+    const f = new Sk.builtin.func(function(_txt, _move, _align, _font, kw) {
+      let align = 'left';
+      let font  = null;
+      if (_align !== undefined && _align !== null) align = _js(_align);
+      if (_font  !== undefined && _font  !== null) font  = _jsFont(_font);
+      if (kw) {
+        if (kw.align !== undefined) align = _js(kw.align);
+        if (kw.font  !== undefined) font  = _jsFont(kw.font);
+      }
+      engine.write(tid, _js(_txt), align, font);
+    });
+    f.co_kwargs = true;
+    return f;
+  }
+
   const mod = {};
 
   // Spec: addshape(url) — url is both identifier and source.
@@ -229,9 +255,7 @@ function _buildTurtleModule(engine) {
   mod.dot    = _fn((_size, _color) => {
     engine.dot(id, _size !== undefined ? _js(_size) : 1, _color !== undefined ? _js(_color) : null);
   });
-  mod.write  = _fn((_txt, _move, _align, _font) => {
-    engine.write(id, _js(_txt), _align ? _js(_align) : 'left');
-  });
+  mod.write  = _mkWrite(id);
 
   // ── state getters ─────────────────────────────────────────────────────────
   mod.xcor     = _fn(() => new Sk.builtin.float_(engine.xcor(id)));
@@ -319,7 +343,7 @@ function _buildTurtleModule(engine) {
       isvisible: _m(()     => new Sk.builtin.bool(engine._turtles[tid].visible)),
       stamp:    _m(()           => engine.stamp(tid)),
       dot:      _m((sz, col)    => engine.dot(tid, sz !== undefined ? _js(sz) : 1, col !== undefined ? _js(col) : null)),
-      write:    _m((t, mv, al)  => engine.write(tid, _js(t), al ? _js(al) : 'left')),
+      write:    _mkWrite(tid),
       xcor:     _m(()      => new Sk.builtin.float_(engine.xcor(tid))),
       ycor:     _m(()      => new Sk.builtin.float_(engine.ycor(tid))),
       heading:  _m(()      => new Sk.builtin.float_(engine._turtles[tid].heading)),
