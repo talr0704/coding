@@ -208,7 +208,9 @@ class TurtleEngine {
       Tab: 'Tab', Delete: 'Delete', Home: 'Home', End: 'End',
       Prior: 'PageUp', Next: 'PageDown'
     };
-    const jsKey = KEY_MAP[keyName] || keyName;
+    // Support both Python-standard capitalisation ("Right") and lowercase ("right")
+    const titleCase = keyName.charAt(0).toUpperCase() + keyName.slice(1);
+    const jsKey = KEY_MAP[keyName] || KEY_MAP[titleCase] || keyName;
     document.addEventListener(press ? 'keydown' : 'keyup', (e) => {
       if (e.key === jsKey) { e.preventDefault(); callback(); }
     });
