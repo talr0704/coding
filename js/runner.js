@@ -249,9 +249,12 @@ function _buildTurtleModule(engine) {
         setworldcoordinates: _fn(() => {}),
         window_height: _fn(() => new Sk.builtin.int_(engine.H)),
         window_width:  _fn(() => new Sk.builtin.int_(engine.W)),
-        onclick:   _fn((_cb) => { _registerCanvasClick(_cb); }),
-        onscreenclick: _fn((_cb) => { _registerCanvasClick(_cb); }),
-        listen:    _fn(() => {}),
+        onclick:        _fn((_cb) => { _registerCanvasClick(_cb); }),
+        onscreenclick:  _fn((_cb) => { _registerCanvasClick(_cb); }),
+        onkey:          _fn((a, b) => { _registerKey(a, b, false); }),
+        onkeyrelease:   _fn((a, b) => { _registerKey(a, b, false); }),
+        onkeypress:     _fn((a, b) => { _registerKey(a, b, true); }),
+        listen:         _fn(() => {}),
       };
       return methods[name] ?? new Sk.builtin.func(() => Sk.builtin.none.none$);
     };
@@ -272,6 +275,19 @@ function _buildTurtleModule(engine) {
     });
   }
 
+  // Helper: register a Python function as keyboard handler.
+  // Supports both argument orders: (fun, key) and (key, fun)
+  function _registerKey(arg1, arg2, press = false) {
+    let pyFn, keyName;
+    if (arg1 instanceof Sk.builtin.str) { keyName = _js(arg1); pyFn = arg2; }
+    else                                { pyFn = arg1; keyName = _js(arg2); }
+    if (!pyFn || !keyName) return;
+    engine.onKey(() => {
+      try { Sk.misceval.callsimArray(pyFn, []); }
+      catch (e) { console.warn('[Turtle] onkey handler error:', e); }
+    }, keyName, press);
+  }
+
   mod.tracer    = _fn(() => {});   // no-op (we draw immediately)
   mod.update    = _fn(() => {});
   mod.done      = mod.mainloop = _fn(() => {});
@@ -279,7 +295,9 @@ function _buildTurtleModule(engine) {
   mod.listen    = _fn(() => {});
   mod.title     = _fn(() => {});
   mod.setup     = _fn((_w, _h) => { if (_w && _h) engine.resize(_js(_w), _js(_h)); });
-  mod.onclick   = mod.onscreenclick = _fn((_cb) => { _registerCanvasClick(_cb); });
+  mod.onclick       = mod.onscreenclick = _fn((_cb) => { _registerCanvasClick(_cb); });
+  mod.onkey         = mod.onkeyrelease  = _fn((a, b) => { _registerKey(a, b, false); });
+  mod.onkeypress    = _fn((a, b) => { _registerKey(a, b, true); });
   mod.colormode = _fn((_m) => { return new Sk.builtin.float_(1.0); });
   mod.delay     = _fn(() => {});
   mod.setworldcoordinates = _fn(() => {});
@@ -386,8 +404,11 @@ function _buildTurtleModule(engine) {
       heading:  _m(()      => new Sk.builtin.float_(engine._turtles[tid].heading)),
       pos:      _m(()      => new Sk.builtin.tuple([new Sk.builtin.float_(engine.xcor(tid)), new Sk.builtin.float_(engine.ycor(tid))])),
       position: _m(()      => new Sk.builtin.tuple([new Sk.builtin.float_(engine.xcor(tid)), new Sk.builtin.float_(engine.ycor(tid))])),
-      isdown:   _m(()      => new Sk.builtin.bool(engine._turtles[tid].penDown)),
-      speed:    _m(()      => {}),
+      isdown:      _m(()      => new Sk.builtin.bool(engine._turtles[tid].penDown)),
+      speed:       _m(()      => {}),
+      onkey:       _m((a, b) => { _registerKey(a, b, false); }),
+      onkeyrelease:_m((a, b) => { _registerKey(a, b, false); }),
+      onkeypress:  _m((a, b) => { _registerKey(a, b, true); }),
       clear:    _m(()      => engine.clearTurtle(tid)),
       reset:    _m(()      => engine.resetTurtle(tid)),
       circle:   _m((r, ext, steps) => {
