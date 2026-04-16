@@ -7,6 +7,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .btn-download-zip {
+      background: #0d9488; border: none; color: #fff;
+      font-family: 'Nunito', sans-serif; font-size: 0.9rem; font-weight: 700;
+      padding: 0.55rem 1.1rem; border-radius: 12px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-download-zip:hover  { background: #0f766e; }
+    .btn-download-zip:disabled { opacity: 0.6; cursor: default; }
+  </style>
 </head>
 <body class="dashboard-page">
 
@@ -28,7 +38,10 @@
         <h1 class="dashboard-title">My Projects 📁</h1>
         <p class="dashboard-subtitle" id="project-count">Loading...</p>
       </div>
-      <button class="btn-new-project" id="new-project-btn">+ New Project</button>
+      <div style="display:flex;gap:0.6rem;align-items:center;">
+        <button class="btn-download-zip" id="download-btn">⬇️ Download All</button>
+        <button class="btn-new-project"  id="new-project-btn">+ New Project</button>
+      </div>
     </div>
 
     <div id="projects-grid" class="projects-grid">
@@ -73,6 +86,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { FIREBASE_CONFIG }  from "./js/config.js";
@@ -270,6 +284,63 @@ for i in range(5):
         .replace(/&/g, "&amp;").replace(/</g, "&lt;")
         .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
+
+    // ── Download all projects as ZIP ─────────────────────────
+    document.getElementById("download-btn").addEventListener("click", async () => {
+      if (!currentUser) return;
+      const btn = document.getElementById("download-btn");
+      btn.disabled = true; btn.textContent = "⏳ Packing…";
+
+      try {
+        const zip     = new window.JSZip();
+        const projects = await listProjects(currentUser.uid);
+
+        if (projects.length === 0) {
+          alert("No projects to download.");
+          return;
+        }
+
+        // Track folder names to avoid duplicates
+        const seen = {};
+        projects.forEach(p => {
+          // Sanitise title for use as a folder/file name
+          let name = (p.title ?? p.name ?? "Untitled")
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim() || "Untitled";
+
+          // Deduplicate: "My Project", "My Project (2)", …
+          if (seen[name]) { seen[name]++; name = `${name} (${seen[name]})`; }
+          else            { seen[name] = 1; }
+
+          const folder = zip.folder(name);
+
+          // Normalise code to { filename: source } map
+          let files = {};
+          if (typeof p.code === "object" && p.code !== null) {
+            files = p.code;
+          } else {
+            const def = p.type === "html" ? "index.html" : "main.py";
+            files = { [def]: p.code || "" };
+          }
+
+          Object.entries(files).forEach(([fname, src]) => {
+            folder.file(fname, src || "");
+          });
+        });
+
+        const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href = url; a.download = "codekids-projects.zip";
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        alert("Could not download projects.");
+      } finally {
+        btn.disabled = false; btn.textContent = "⬇️ Download All";
+      }
+    });
   </script>
 </body>
 </html>
