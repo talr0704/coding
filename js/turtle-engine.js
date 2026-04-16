@@ -195,6 +195,25 @@ class TurtleEngine {
     this._wrap.addEventListener('click', this._clickHandler);
   }
 
+  /**
+   * Register a keyboard handler (mirrors screen.onkey / screen.onkeypress).
+   * @param {function} callback  JS function to call (no args)
+   * @param {string}   keyName   Python turtle key name ("Right","Left","Up","Down","space", or char)
+   * @param {boolean}  press     true = keydown, false = keyup (default)
+   */
+  onKey(callback, keyName, press = false) {
+    const KEY_MAP = {
+      Right: 'ArrowRight', Left: 'ArrowLeft', Up: 'ArrowUp', Down: 'ArrowDown',
+      space: ' ', Return: 'Enter', BackSpace: 'Backspace', Escape: 'Escape',
+      Tab: 'Tab', Delete: 'Delete', Home: 'Home', End: 'End',
+      Prior: 'PageUp', Next: 'PageDown'
+    };
+    const jsKey = KEY_MAP[keyName] || keyName;
+    document.addEventListener(press ? 'keydown' : 'keyup', (e) => {
+      if (e.key === jsKey) { e.preventDefault(); callback(); }
+    });
+  }
+
   // ── Turtle lifecycle ──────────────────────────────────────────────────────
 
   newTurtle() {
@@ -482,8 +501,10 @@ class TurtleEngine {
 
     const img = this._imgCache[t.shape];
     if (img) {
-      // Custom image shape — centred, 40×40 px
-      ctx.drawImage(img, -20, -20, 40, 40);
+      // Draw at natural image size, centred on turtle position
+      const iw = img.naturalWidth  || 40;
+      const ih = img.naturalHeight || 40;
+      ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
     } else if (this._shapeReg[t.shape] === 'builtin' && _BUILTIN[t.shape]) {
       _BUILTIN[t.shape](ctx, t.fillColor, t.penColor);
     } else {
