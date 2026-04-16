@@ -406,9 +406,6 @@ function _buildTurtleModule(engine) {
       position: _m(()      => new Sk.builtin.tuple([new Sk.builtin.float_(engine.xcor(tid)), new Sk.builtin.float_(engine.ycor(tid))])),
       isdown:      _m(()      => new Sk.builtin.bool(engine._turtles[tid].penDown)),
       speed:       _m(()      => {}),
-      onkey:       _m((a, b) => { _registerKey(a, b, false); }),
-      onkeyrelease:_m((a, b) => { _registerKey(a, b, false); }),
-      onkeypress:  _m((a, b) => { _registerKey(a, b, true); }),
       clear:    _m(()      => engine.clearTurtle(tid)),
       reset:    _m(()      => engine.resetTurtle(tid)),
       circle:   _m((r, ext, steps) => {
