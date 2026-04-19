@@ -246,15 +246,21 @@
     let projectImages  = [];
     let publicId       = null;   // set once project is shared
     let authResolved   = false;  // true after first non-null auth state
+    let signOutTimer   = null;   // debounce transient nulls from cross-tab sync
 
     onAuthChange(async user => {
       if (!user) {
-        // Firebase Auth sometimes emits null briefly when a new tab on the same
-        // origin initialises Auth (cross-tab token sync). Only redirect once we
-        // know the user was genuinely authenticated and then signed out.
-        if (authResolved) window.location.href = "index.html";
+        // Firebase Auth emits null briefly when a new tab on the same origin
+        // initialises Auth (cross-tab BroadcastChannel sync). Debounce 2 s so
+        // a genuine sign-out still redirects, but transient nulls are ignored.
+        if (authResolved) {
+          signOutTimer = setTimeout(() => {
+            window.location.href = "index.html";
+          }, 2000);
+        }
         return;
       }
+      if (signOutTimer) { clearTimeout(signOutTimer); signOutTimer = null; }
       authResolved = true;
       currentUser = user;
       if (!projectId) { window.location.href = "dashboard.html"; return; }
