@@ -122,7 +122,8 @@
 
   <!-- Firebase + Auth module -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { FIREBASE_CONFIG } from "./js/config.js";
     import {
       initAuth, onAuthChange,
@@ -133,6 +134,28 @@
 
     const app  = initializeApp(FIREBASE_CONFIG);
     const auth = initAuth(app);
+    const db   = getFirestore(app);
+
+    // Check if signed-in user is in the authorizedStudents allowlist.
+    async function assertAuthorized(user) {
+      const email = (user.email || '').toLowerCase();
+      const snap  = await getDoc(doc(db, 'authorizedStudents', email));
+      return snap.exists() && snap.data().status === 'active';
+    }
+
+    function showUnauthorizedError(msg) {
+      // Switch to Google tab so the error is visible
+      document.querySelectorAll('.auth-tab').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      const googleTab = document.querySelector('.auth-tab[data-tab="google"]');
+      googleTab.classList.add('active');
+      googleTab.setAttribute('aria-selected', 'true');
+      document.getElementById('tab-google').style.display = '';
+      document.getElementById('tab-email').style.display  = 'none';
+      showError('google-error', msg);
+    }
 
     // ── Tab switching ────────────────────────────────────────
     const tabs = document.querySelectorAll(".auth-tab");
@@ -230,8 +253,25 @@
     document.getElementById("sign-out-btn").addEventListener("click", () => doSignOut());
 
     // ── Auth state ───────────────────────────────────────────
-    onAuthChange(user => {
+    onAuthChange(async user => {
       if (user) {
+        // Verify the user is in the authorized-students allowlist.
+        let authorized = false;
+        try {
+          authorized = await assertAuthorized(user);
+        } catch (e) {
+          console.error('Authorization check failed', e);
+          await doSignOut();
+          showUnauthorizedError('שגיאה בבדיקת הרשאות. נסה שוב.');
+          return;
+        }
+
+        if (!authorized) {
+          await doSignOut();
+          showUnauthorizedError('אינך מורשה להיכנס לאתר. פנה למורה שלך 🔒');
+          return;
+        }
+
         document.getElementById("signed-out-view").style.display = "none";
         document.getElementById("signed-in-view").style.display  = "flex";
         document.getElementById("user-display-name").textContent = user.displayName || user.email || "Coder";
