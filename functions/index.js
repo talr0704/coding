@@ -7,28 +7,28 @@ const db   = admin.firestore();
 const auth = admin.auth();
 
 // Secret stored in Firebase Secret Manager — never appears in source code.
-// Deploy with: firebase functions:secrets:set CODEKIDS_API_KEY
-const API_KEY = defineSecret("CODEKIDS_API_KEY");
+// One-time setup: firebase functions:secrets:set ZAPIER_SECRET
+const ZAPIER_SECRET = defineSecret("ZAPIER_SECRET");
 
 // Normalise varied status strings from Zapier to "active" | "withdrawn"
 function normaliseStatus(raw = "") {
   const s = raw.toLowerCase().trim();
-  if (["active", "enrolled", "registered", "פעיל"].includes(s))            return "active";
+  if (["active", "enrolled", "registered", "פעיל"].includes(s))   return "active";
   if (["withdrawn", "inactive", "cancelled", "canceled",
-       "withdrew", "left", "פרש", "לא פעיל"].includes(s))                  return "withdrawn";
+       "withdrew", "left", "פרש", "לא פעיל"].includes(s))         return "withdrawn";
   return null;
 }
 
 exports.updateStudentStatus = onRequest(
-  { secrets: [API_KEY] },
+  { secrets: [ZAPIER_SECRET] },
   async (req, res) => {
     try {
       if (req.method !== "POST") {
         return res.status(405).send("Method Not Allowed");
       }
 
-      // ── 1. Authenticate the request ──────────────────────────
-      if (req.headers["x-api-key"] !== API_KEY.value()) {
+      // ── 1. Verify Zapier secret ───────────────────────────────
+      if (req.headers["x-zapier-secret"] !== ZAPIER_SECRET.value()) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
@@ -63,8 +63,6 @@ exports.updateStudentStatus = onRequest(
       } catch (err) {
         if (err.code === "auth/user-not-found") {
           if (isActive) {
-            // Pre-create the account so it is ready when the student signs in.
-            // No password — authentication is via Google.
             const created = await auth.createUser({
               email:       normalizedEmail,
               displayName: name,
@@ -72,24 +70,18 @@ exports.updateStudentStatus = onRequest(
             });
             uid = created.uid;
           }
-          // Withdrawn + no account → nothing to do in Auth.
         } else {
           throw err;
         }
       }
 
-      // Store uid in Firestore for easy cross-reference
       if (uid) {
         await db.collection("authorizedStudents")
           .doc(normalizedEmail).update({ uid });
       }
 
       console.log(`[OK] ${normalizedEmail} → ${status}`);
-      return res.status(200).json({
-        success: true,
-        email:   normalizedEmail,
-        status,
-      });
+      return res.status(200).json({ success: true, email: normalizedEmail, status });
 
     } catch (error) {
       console.error("Error updating student:", error);
