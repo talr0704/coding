@@ -1,4 +1,4 @@
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
@@ -6,7 +6,6 @@ admin.initializeApp();
 const db   = admin.firestore();
 const auth = admin.auth();
 
-// Secret stored in Firebase Secret Manager — never appears in source code.
 // One-time setup: firebase functions:secrets:set ZAPIER_SECRET
 const ZAPIER_SECRET = defineSecret("ZAPIER_SECRET");
 
@@ -19,21 +18,18 @@ function normaliseStatus(raw = "") {
   return null;
 }
 
+// ── Zapier webhook: sync student status ──────────────────────────────────────
 exports.updateStudentStatus = onRequest(
   { secrets: [ZAPIER_SECRET] },
   async (req, res) => {
     try {
-      if (req.method !== "POST") {
-        return res.status(405).send("Method Not Allowed");
-      }
+      if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
-      // ── 1. Verify Zapier secret ───────────────────────────────
       if (req.headers["x-zapier-secret"] !== ZAPIER_SECRET.value()) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // ── 2. Validate body ──────────────────────────────────────
-      const { email, name = "", status: rawStatus } = req.body;
+      const { email, name = "", status: rawStatus, role = "student" } = req.body;
       const status = normaliseStatus(rawStatus);
 
       if (!email || !status) {
@@ -46,15 +42,14 @@ exports.updateStudentStatus = onRequest(
       const normalizedEmail = email.toLowerCase().trim();
       const isActive = status === "active";
 
-      // ── 3. Update Firestore allowlist ─────────────────────────
       await db.collection("authorizedStudents").doc(normalizedEmail).set({
         email:     normalizedEmail,
         name:      name,
         status:    status,
+        role:      role === "teacher" ? "teacher" : "student",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      // ── 4. Sync Firebase Auth user ────────────────────────────
       let uid = null;
       try {
         const existing = await auth.getUserByEmail(normalizedEmail);
@@ -64,9 +59,7 @@ exports.updateStudentStatus = onRequest(
         if (err.code === "auth/user-not-found") {
           if (isActive) {
             const created = await auth.createUser({
-              email:       normalizedEmail,
-              displayName: name,
-              disabled:    false,
+              email: normalizedEmail, displayName: name, disabled: false,
             });
             uid = created.uid;
           }
@@ -76,12 +69,11 @@ exports.updateStudentStatus = onRequest(
       }
 
       if (uid) {
-        await db.collection("authorizedStudents")
-          .doc(normalizedEmail).update({ uid });
+        await db.collection("authorizedStudents").doc(normalizedEmail).update({ uid });
       }
 
-      console.log(`[OK] ${normalizedEmail} → ${status}`);
-      return res.status(200).json({ success: true, email: normalizedEmail, status });
+      console.log(`[OK] ${normalizedEmail} → ${status} (${role})`);
+      return res.status(200).json({ success: true, email: normalizedEmail, status, role });
 
     } catch (error) {
       console.error("Error updating student:", error);
@@ -89,3 +81,49 @@ exports.updateStudentStatus = onRequest(
     }
   }
 );
+
+// ── Callable: teacher creates/resets a student account password ──────────────
+exports.createStudentAccount = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in");
+  }
+
+  const callerEmail = (request.auth.token.email || "").toLowerCase();
+
+  // Verify caller is a teacher
+  const teacherSnap = await db.collection("authorizedStudents").doc(callerEmail).get();
+  if (!teacherSnap.exists || teacherSnap.data().role !== "teacher") {
+    throw new HttpsError("permission-denied", "Only teachers can create student accounts");
+  }
+
+  const { email, password } = request.data || {};
+  if (!email || !password || password.length < 6) {
+    throw new HttpsError("invalid-argument", "Valid email and password (min 6 chars) required");
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Verify student is in the authorized list
+  const studentSnap = await db.collection("authorizedStudents").doc(normalizedEmail).get();
+  if (!studentSnap.exists || studentSnap.data().status !== "active") {
+    throw new HttpsError("not-found", "Student not found in authorized list");
+  }
+
+  try {
+    const existing = await auth.getUserByEmail(normalizedEmail);
+    await auth.updateUser(existing.uid, { password, disabled: false });
+    return { success: true, created: false };
+  } catch (err) {
+    if (err.code === "auth/user-not-found") {
+      const created = await auth.createUser({
+        email:       normalizedEmail,
+        displayName: studentSnap.data().name || "",
+        password,
+        disabled:    false,
+      });
+      await db.collection("authorizedStudents").doc(normalizedEmail).update({ uid: created.uid });
+      return { success: true, created: true };
+    }
+    throw err;
+  }
+});
