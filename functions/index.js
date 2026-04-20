@@ -1,4 +1,5 @@
 const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule }  = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
@@ -9,7 +10,6 @@ const auth = admin.auth();
 // One-time setup: firebase functions:secrets:set ZAPIER_SECRET
 const ZAPIER_SECRET = defineSecret("ZAPIER_SECRET");
 
-// Normalise varied status strings from Zapier to "active" | "withdrawn"
 function normaliseStatus(raw = "") {
   const s = raw.toLowerCase().trim();
   if (["active", "enrolled", "registered", "פעיל"].includes(s))   return "active";
@@ -42,14 +42,31 @@ exports.updateStudentStatus = onRequest(
       const normalizedEmail = email.toLowerCase().trim();
       const isActive = status === "active";
 
-      await db.collection("authorizedStudents").doc(normalizedEmail).set({
+      // Build Firestore update
+      const updateData = {
         email:     normalizedEmail,
         name:      name,
         status:    status,
         role:      role === "teacher" ? "teacher" : "student",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+      };
 
+      if (isActive) {
+        // Reactivated — clear the withdrawal date
+        updateData.withdrawnAt = null;
+      } else {
+        // Only record withdrawnAt the first time (don't reset the grace period
+        // if Zapier sends the same "withdrawn" status again later)
+        const existing = await db.collection("authorizedStudents").doc(normalizedEmail).get();
+        if (!existing.exists || !existing.data().withdrawnAt) {
+          updateData.withdrawnAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+      }
+
+      await db.collection("authorizedStudents").doc(normalizedEmail)
+        .set(updateData, { merge: true });
+
+      // Sync Firebase Auth user
       let uid = null;
       try {
         const existing = await auth.getUserByEmail(normalizedEmail);
@@ -73,7 +90,7 @@ exports.updateStudentStatus = onRequest(
       }
 
       console.log(`[OK] ${normalizedEmail} → ${status} (${role})`);
-      return res.status(200).json({ success: true, email: normalizedEmail, status, role });
+      return res.status(200).json({ success: true, email: normalizedEmail, status });
 
     } catch (error) {
       console.error("Error updating student:", error);
@@ -82,15 +99,11 @@ exports.updateStudentStatus = onRequest(
   }
 );
 
-// ── Callable: teacher creates/resets a student account password ──────────────
+// ── Callable: teacher creates / resets a student's password ──────────────────
 exports.createStudentAccount = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be signed in");
-  }
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in");
 
   const callerEmail = (request.auth.token.email || "").toLowerCase();
-
-  // Verify caller is a teacher
   const teacherSnap = await db.collection("authorizedStudents").doc(callerEmail).get();
   if (!teacherSnap.exists || teacherSnap.data().role !== "teacher") {
     throw new HttpsError("permission-denied", "Only teachers can create student accounts");
@@ -102,8 +115,6 @@ exports.createStudentAccount = onCall(async (request) => {
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-
-  // Verify student is in the authorized list
   const studentSnap = await db.collection("authorizedStudents").doc(normalizedEmail).get();
   if (!studentSnap.exists || studentSnap.data().status !== "active") {
     throw new HttpsError("not-found", "Student not found in authorized list");
@@ -125,5 +136,69 @@ exports.createStudentAccount = onCall(async (request) => {
       return { success: true, created: true };
     }
     throw err;
+  }
+});
+
+// ── Scheduled: delete data for students whose 6-month grace period expired ───
+// Runs every day at 03:00 Israel time.
+exports.cleanupExpiredStudents = onSchedule("every 24 hours", async () => {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const snap = await db.collection("authorizedStudents")
+    .where("status", "==", "withdrawn")
+    .where("withdrawnAt", "<=", sixMonthsAgo)
+    .get();
+
+  if (snap.empty) {
+    console.log("[cleanup] No expired students found.");
+    return;
+  }
+
+  for (const studentDoc of snap.docs) {
+    const { email, uid } = studentDoc.data();
+    console.log(`[cleanup] Processing ${email} (uid: ${uid})`);
+
+    try {
+      // 1. Delete Firestore projects
+      if (uid) {
+        const projectsSnap = await db
+          .collection("users").doc(uid).collection("projects").get();
+
+        if (!projectsSnap.empty) {
+          const batch = db.batch();
+          projectsSnap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+        await db.collection("users").doc(uid).delete();
+      }
+
+      // 2. Delete Storage files (images uploaded by student)
+      if (uid) {
+        try {
+          const bucket = admin.storage().bucket();
+          await bucket.deleteFiles({ prefix: `users/${uid}/` });
+        } catch (storageErr) {
+          // Storage folder may not exist — not an error
+          console.log(`[cleanup] No storage files for ${uid}`);
+        }
+      }
+
+      // 3. Disable Firebase Auth account
+      if (uid) {
+        try { await auth.updateUser(uid, { disabled: true }); }
+        catch (_) { /* user may already be deleted */ }
+      }
+
+      // 4. Mark as expired in Firestore
+      await studentDoc.ref.update({
+        status:    "expired",
+        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[cleanup] ✓ ${email} expired and cleaned up`);
+    } catch (err) {
+      console.error(`[cleanup] ✗ Failed for ${email}:`, err);
+    }
   }
 });
