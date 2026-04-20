@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Try Python — CodeKids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .trial-banner {
+      background: linear-gradient(90deg, #7c3aed, #a855f7);
+      color: #fff;
+      text-align: center;
+      padding: 0.55rem 1rem;
+      font-family: 'Nunito', sans-serif;
+      font-size: 0.92rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .trial-banner a { color: #fde68a; text-decoration: underline; }
+    .trial-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      height: 52px;
+      background: #1e1e2e;
+      border-bottom: 1px solid #2d2d3f;
+      flex-shrink: 0;
+    }
+    .trial-logo  { font-family: 'Fredoka One', cursive; color: #a78bfa; font-size: 1.15rem; }
+    .trial-badge {
+      background: #f59e0b; color: #fff;
+      font-family: 'Nunito', sans-serif; font-size: 0.75rem; font-weight: 800;
+      padding: 0.15rem 0.55rem; border-radius: 20px;
+    }
+    .trial-title { color: #e2e8f0; font-family: 'Nunito', sans-serif; font-size: 1rem; font-weight: 700; }
+  </style>
+</head>
+<body class="editor-page" style="display:flex;flex-direction:column;height:100vh;">
+
+  <div class="trial-banner">
+    🎉 Trial lesson — code is not saved. Join the course to keep your projects!
+    &nbsp;<a href="index.html">Sign up →</a>
+  </div>
+
+  <header class="trial-topbar">
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <span class="trial-logo">🚀 CodeKids</span>
+      <span class="trial-badge">Trial Lesson</span>
+      <span class="trial-title">Python Playground</span>
+    </div>
+    <div class="editor-topbar-right">
+      <button class="btn-run"  id="run-btn">▶ Run</button>
+      <button class="btn-clear" id="clear-btn" style="margin-left:0.5rem;">🗑️ Clear</button>
+    </div>
+  </header>
+
+  <div class="editor-layout" style="flex:1;overflow:hidden;">
+
+    <div class="code-panel" id="code-panel">
+      <div class="cm-wrapper">
+        <textarea id="code-textarea"></textarea>
+      </div>
+    </div>
+
+    <div class="resize-handle" id="resize-handle"></div>
+
+    <div class="output-panel" id="output-panel">
+
+      <div id="python-output-section">
+        <div class="output-toolbar">
+          <span class="output-label">🖥️ Output</span>
+        </div>
+        <div id="output-area" class="output-area">
+          <p class="output-hint">Click <strong>▶ Run</strong> to execute your code!</p>
+        </div>
+        <div id="input-bar" class="input-bar" style="display:none;">
+          <span id="input-prompt-label" class="input-prompt-label"></span>
+          <input type="text" id="python-input" class="python-input" placeholder="Type your answer…" />
+          <button id="input-submit" class="btn-input-submit">↵</button>
+        </div>
+      </div>
+
+      <div id="turtle-resize-handle" class="turtle-v-resize" style="display:none;"></div>
+      <div id="turtle-output-section" style="display:none;">
+        <div class="output-toolbar">
+          <span class="output-label">🐢 Turtle</span>
+          <div class="turtle-toolbar-right">
+            <button class="btn-clear" id="clear-turtle-btn">Clear</button>
+            <button class="btn-clear" id="reset-turtle-btn">Reset</button>
+          </div>
+        </div>
+        <div id="turtle-canvas"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+
+  <script type="module">
+    import { runPython, formatPythonError, usesTurtle } from "./js/runner.js";
+
+    // ── CodeMirror ───────────────────────────────────────────
+    const editor = CodeMirror.fromTextArea(
+      document.getElementById("code-textarea"),
+      {
+        mode: "python", theme: "dracula",
+        lineNumbers: true, indentUnit: 4, tabSize: 4,
+        indentWithTabs: false, autoCloseBrackets: true, matchBrackets: true,
+        extraKeys: { "Ctrl-Enter": runCode, "Cmd-Enter": runCode,
+                     Tab: cm => cm.execCommand("indentMore") }
+      }
+    );
+
+    editor.setValue(`# Welcome to CodeKids! 🐍\n# Write your Python code and click Run!\n\nname = input("What's your name? ")\nprint("Hello, " + name + "! Welcome to coding! 🎉")\n\nfor i in range(5):\n    print("⭐ " * (i + 1))\n`);
+
+    // ── DOM ──────────────────────────────────────────────────
+    const outputArea    = document.getElementById("output-area");
+    const runBtn        = document.getElementById("run-btn");
+    const inputBar      = document.getElementById("input-bar");
+    const inputPrompt   = document.getElementById("input-prompt-label");
+    const pythonInput   = document.getElementById("python-input");
+    const inputSubmit   = document.getElementById("input-submit");
+    const turtleSection = document.getElementById("turtle-output-section");
+    const turtleCanvas  = document.getElementById("turtle-canvas");
+    const outputPanel   = document.getElementById("output-panel");
+
+    function appendText(text, cls = "output-line") {
+      const el = document.createElement("pre");
+      el.className = cls;
+      el.textContent = text;
+      outputArea.appendChild(el);
+      outputArea.scrollTop = outputArea.scrollHeight;
+    }
+
+    // ── input() ──────────────────────────────────────────────
+    let inputResolve = null;
+
+    function skulptInput(prompt) {
+      return new Promise(resolve => {
+        inputResolve = resolve;
+        inputPrompt.textContent = prompt || "";
+        inputBar.style.display  = "flex";
+        pythonInput.value = "";
+        pythonInput.focus();
+      });
+    }
+
+    function submitInput() {
+      const val = pythonInput.value;
+      appendText((inputPrompt.textContent || "") + val, "output-input-echo");
+      inputBar.style.display = "none";
+      if (inputResolve) { inputResolve(val); inputResolve = null; }
+    }
+
+    inputSubmit.addEventListener("click", submitInput);
+    pythonInput.addEventListener("keydown", e => { if (e.key === "Enter") submitInput(); });
+
+    // ── Clear ────────────────────────────────────────────────
+    document.getElementById("clear-btn").addEventListener("click", () => {
+      outputArea.innerHTML = '<p class="output-hint">Click <strong>▶ Run</strong> to execute your code!</p>';
+      turtleSection.style.display = "none";
+      document.getElementById("turtle-resize-handle").style.display = "none";
+    });
+    document.getElementById("clear-turtle-btn").addEventListener("click", () =>
+      turtleCanvas.dispatchEvent(new CustomEvent("turtle-clear")));
+    document.getElementById("reset-turtle-btn").addEventListener("click", () =>
+      turtleCanvas.dispatchEvent(new CustomEvent("turtle-reset")));
+
+    // ── Run ──────────────────────────────────────────────────
+    async function runCode() {
+      const code = editor.getValue();
+      outputArea.innerHTML = "";
+      runBtn.disabled = true; runBtn.textContent = "⏳ Running...";
+
+      const hasTurtle = usesTurtle(code);
+      const tkHandle  = document.getElementById("turtle-resize-handle");
+
+      if (hasTurtle) {
+        if (!turtleSection.dataset.initH) {
+          turtleSection.style.height  = Math.round(outputPanel.getBoundingClientRect().height * 0.5) + "px";
+          turtleSection.dataset.initH = "1";
+        }
+        turtleSection.style.display = "flex";
+        tkHandle.style.display      = "block";
+        turtleCanvas.innerHTML      = "";
+      } else {
+        turtleSection.style.display = "none";
+        tkHandle.style.display      = "none";
+      }
+
+      const result = await runPython({
+        mainCode:      code,
+        extraFiles:    {},
+        onOutput:      text => appendText(text),
+        onInput:       skulptInput,
+        turtleTarget:  hasTurtle ? "turtle-canvas" : null,
+        projectImages: null,
+      });
+
+      if (result.success) {
+        appendText("\n✅ Program finished!", "output-success");
+      } else if (result.error) {
+        appendText(formatPythonError(result.error), "output-error");
+      }
+
+      runBtn.disabled = false; runBtn.textContent = "▶ Run";
+    }
+
+    runBtn.addEventListener("click", runCode);
+
+    // ── Resize handle ────────────────────────────────────────
+    const handle    = document.getElementById("resize-handle");
+    const codePanel = document.getElementById("code-panel");
+    let dragging = false;
+    handle.addEventListener("mousedown", () => { dragging = true; });
+    document.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      const rect = codePanel.parentElement.getBoundingClientRect();
+      const pct  = Math.min(80, Math.max(20, ((e.clientX - rect.left) / rect.width) * 100));
+      codePanel.style.width = pct + "%";
+    });
+    document.addEventListener("mouseup", () => { dragging = false; });
+  </script>
+</body>
+</html>
