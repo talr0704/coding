@@ -40,6 +40,7 @@
       </div>
       <div style="display:flex;gap:0.6rem;align-items:center;">
         <button class="btn-download-zip" id="download-btn">⬇️ Download All</button>
+        <button class="btn-download-zip" id="create-student-btn" style="display:none;background:#7c3aed;">👤 Create Student Account</button>
         <button class="btn-new-project"  id="new-project-btn">+ New Project</button>
       </div>
     </div>
@@ -74,6 +75,29 @@
     </div>
   </div>
 
+  <!-- Create Student Account Modal (teachers only) -->
+  <div id="create-student-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal modal-sm">
+      <h2 class="modal-title">Create Student Account 👤</h2>
+      <p style="font-size:0.9rem;color:#6b7280;margin-bottom:1rem;">
+        The student must already be registered in the system (via Zapier).
+      </p>
+      <div class="form-group">
+        <label for="student-email-input">Student Email</label>
+        <input type="email" id="student-email-input" placeholder="student@gmail.com" />
+      </div>
+      <div class="form-group">
+        <label for="student-password-input">Temporary Password</label>
+        <input type="password" id="student-password-input" placeholder="Min 6 characters" />
+      </div>
+      <div id="create-student-error" style="color:#ef4444;font-size:0.85rem;min-height:1.2rem;margin-bottom:0.5rem;"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="cancel-create-student">Cancel</button>
+        <button class="btn-create" id="confirm-create-student">Create Account 🚀</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Delete Confirm Modal -->
   <div id="delete-modal" class="modal-backdrop" style="display:none;">
     <div class="modal modal-sm">
@@ -88,7 +112,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
     import { FIREBASE_CONFIG }  from "./js/config.js";
     import { initAuth, onAuthChange, doSignOut } from "./js/auth.js";
     import { initFirestore, createProject, listProjects, deleteProject } from "./js/projects.js";
@@ -96,6 +122,7 @@
     const app  = initializeApp(FIREBASE_CONFIG);
     const auth = initAuth(app);
     const db   = initFirestore(app);
+    const fns  = getFunctions(app);
 
     const STARTER_CODE = {
       python: `# Welcome to CodeKids! 🐍
@@ -150,10 +177,54 @@ for i in range(5):
       currentUser = user;
       document.getElementById("user-name").textContent = user.displayName || user.email || "Coder";
       if (user.photoURL) document.getElementById("user-avatar").src = user.photoURL;
+
+      // Show teacher button if user has role: "teacher"
+      const db2 = getFirestore(app);
+      const snap = await getDoc(doc(db2, "authorizedStudents", (user.email || "").toLowerCase()));
+      if (snap.exists() && snap.data().role === "teacher") {
+        document.getElementById("create-student-btn").style.display = "";
+      }
+
       await loadProjects();
     });
 
     document.getElementById("sign-out-btn").addEventListener("click", () => doSignOut());
+
+    // ── Create student account (teacher only) ────────────────
+    document.getElementById("create-student-btn").addEventListener("click", () => {
+      document.getElementById("student-email-input").value = "";
+      document.getElementById("student-password-input").value = "";
+      document.getElementById("create-student-error").textContent = "";
+      document.getElementById("create-student-modal").style.display = "flex";
+    });
+
+    document.getElementById("cancel-create-student").addEventListener("click", () => {
+      document.getElementById("create-student-modal").style.display = "none";
+    });
+
+    document.getElementById("confirm-create-student").addEventListener("click", async () => {
+      const email    = document.getElementById("student-email-input").value.trim();
+      const password = document.getElementById("student-password-input").value;
+      const errEl    = document.getElementById("create-student-error");
+      const btn      = document.getElementById("confirm-create-student");
+
+      if (!email || !password) { errEl.textContent = "Please fill in all fields."; return; }
+      if (password.length < 6) { errEl.textContent = "Password must be at least 6 characters."; return; }
+
+      btn.disabled = true; btn.textContent = "Creating...";
+      try {
+        const createStudentAccount = httpsCallable(fns, "createStudentAccount");
+        const result = await createStudentAccount({ email, password });
+        document.getElementById("create-student-modal").style.display = "none";
+        alert(result.data.created
+          ? `✅ Account created for ${email}`
+          : `✅ Password updated for ${email}`);
+      } catch (e) {
+        errEl.textContent = e.message || "Error creating account.";
+      } finally {
+        btn.disabled = false; btn.textContent = "Create Account 🚀";
+      }
+    });
 
     // ── Project type selector ────────────────────────────────
     document.querySelectorAll(".type-btn").forEach(btn => {

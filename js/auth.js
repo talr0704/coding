@@ -94,6 +94,18 @@ export async function doSignOut() {
   return signOut(_auth);
 }
 
+export async function sendPasswordReset(email) {
+  try {
+    const { sendPasswordResetEmail } = await import(
+      "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"
+    );
+    await sendPasswordResetEmail(_auth, email);
+    return { error: null };
+  } catch (err) {
+    return { error: err };
+  }
+}
+
 // Maps Firebase auth error codes to friendly Hebrew messages.
 export function getAuthErrorMsg(error) {
   const map = {

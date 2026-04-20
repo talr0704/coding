@@ -66,6 +66,7 @@
               <button class="btn-email-primary"   id="btn-sign-in">Sign In</button>
               <button class="btn-email-secondary" id="btn-sign-up">Sign Up</button>
             </div>
+            <button class="btn-forgot" id="btn-forgot">Forgot password?</button>
           </div>
         </div>
       </div>
@@ -129,7 +130,7 @@
       initAuth, onAuthChange,
       signInWithGoogle, signUpEmail, signInEmail,
       linkGoogleToEmailAccount, doSignOut,
-      getAuthErrorMsg
+      getAuthErrorMsg, sendPasswordReset
     } from "./js/auth.js";
 
     const app  = initializeApp(FIREBASE_CONFIG);
@@ -251,6 +252,15 @@
 
     // ── Sign Out ─────────────────────────────────────────────
     document.getElementById("sign-out-btn").addEventListener("click", () => doSignOut());
+
+    document.getElementById("btn-forgot").addEventListener("click", async () => {
+      const email = document.getElementById("email-input").value.trim();
+      if (!email) { showError("email-error", "Please enter your email first."); return; }
+      const { error } = await sendPasswordReset(email);
+      if (error) { showError("email-error", getAuthErrorMsg(error)); return; }
+      showError("email-error", "✅ Reset email sent! Check your inbox.");
+      document.getElementById("email-error").style.color = "#16a34a";
+    });
 
     // ── Auth state ───────────────────────────────────────────
     onAuthChange(async user => {
