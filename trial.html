@@ -202,7 +202,7 @@
       const result = await runPython({
         mainCode:      code,
         extraFiles:    {},
-        onOutput:      text => appendText(text),
+        onOutput:      text => appendText(String(text)),
         onInput:       skulptInput,
         turtleTarget:  hasTurtle ? "turtle-canvas" : null,
         projectImages: null,
@@ -211,7 +211,8 @@
       if (result.success) {
         appendText("\n✅ Program finished!", "output-success");
       } else if (result.error) {
-        appendText(formatPythonError(result.error), "output-error");
+        const msg = formatPythonError(result.error);
+        appendText(typeof msg === "string" ? msg : JSON.stringify(msg), "output-error");
       }
 
       runBtn.disabled = false; runBtn.textContent = "▶ Run";
